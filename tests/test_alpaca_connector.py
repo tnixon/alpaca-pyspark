@@ -17,7 +17,7 @@ import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType, TimestampType
 
-from alpaca_connector import AlpacaHistoricalBarsConnector, create_connector
+from src.alpaca_connector import AlpacaHistoricalBarsConnector, create_connector
 
 
 class TestAlpacaHistoricalBarsConnector(unittest.TestCase):
@@ -152,7 +152,7 @@ class TestAlpacaHistoricalBarsConnector(unittest.TestCase):
         self.assertEqual(ranges[1], ('2024-01-12', '2024-01-22'))
         self.assertEqual(ranges[2], ('2024-01-23', '2024-01-25'))
     
-    @patch('alpaca_connector.requests.get')
+    @patch('src.alpaca_connector.requests.get')
     def test_make_request_with_retry_success(self, mock_get):
         """Test successful API request."""
         mock_response = Mock()
@@ -172,7 +172,7 @@ class TestAlpacaHistoricalBarsConnector(unittest.TestCase):
         self.assertEqual(result, self.sample_api_response)
         mock_get.assert_called_once()
     
-    @patch('alpaca_connector.requests.get')
+    @patch('src.alpaca_connector.requests.get')
     def test_make_request_with_retry_failure(self, mock_get):
         """Test API request failure."""
         mock_response = Mock()
@@ -191,7 +191,7 @@ class TestAlpacaHistoricalBarsConnector(unittest.TestCase):
         
         self.assertIsNone(result)
     
-    @patch('alpaca_connector.requests.get')
+    @patch('src.alpaca_connector.requests.get')
     @patch('time.sleep')  # Mock sleep to speed up tests
     def test_make_request_with_retry_rate_limit(self, mock_sleep, mock_get):
         """Test API request with rate limiting."""
@@ -244,7 +244,7 @@ class TestAlpacaHistoricalBarsConnector(unittest.TestCase):
             expected_timestamp = datetime(2024, 1, 1, 9, 30, 0)
             self.assertEqual(bar1['timestamp'], expected_timestamp)
     
-    @patch('alpaca_connector.requests.get')
+    @patch('src.alpaca_connector.requests.get')
     def test_validate_connection_success(self, mock_get):
         """Test successful connection validation."""
         mock_response = Mock()
@@ -260,7 +260,7 @@ class TestAlpacaHistoricalBarsConnector(unittest.TestCase):
         result = connector.validate_connection()
         self.assertTrue(result)
     
-    @patch('alpaca_connector.requests.get')
+    @patch('src.alpaca_connector.requests.get')
     def test_validate_connection_failure(self, mock_get):
         """Test failed connection validation."""
         mock_response = Mock()

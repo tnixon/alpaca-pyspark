@@ -34,11 +34,28 @@ cd alpaca-pyspark
 pip install pyspark requests pandas matplotlib seaborn
 ```
 
+## Project Structure
+
+The project is organized into the following directories:
+
+```
+alpaca-pyspark/
+├── src/                    # Source code
+│   └── alpaca_connector.py # Main connector module
+├── tests/                  # Test suite
+│   └── test_alpaca_connector.py
+├── notebooks/              # Jupyter notebooks
+│   └── alpaca_demo.ipynb   # Interactive demo
+├── requirements.txt        # Python dependencies
+├── .gitignore             # Git ignore rules
+└── README.md              # This file
+```
+
 ### Basic Usage
 
 ```python
 from pyspark.sql import SparkSession
-from alpaca_connector import create_connector
+from src.alpaca_connector import create_connector
 import os
 
 # Set your API credentials
@@ -233,10 +250,10 @@ Run the comprehensive test suite:
 
 ```bash
 # Run all tests
-python -m pytest test_alpaca_connector.py -v
+python -m pytest tests/ -v
 
 # Run with coverage
-python -m pytest test_alpaca_connector.py --cov=alpaca_connector --cov-report=html
+python -m pytest tests/ --cov=src --cov-report=html
 ```
 
 ### Test Coverage
@@ -255,7 +272,7 @@ The test suite covers:
 Explore the full capabilities with our interactive Jupyter notebook:
 
 ```bash
-jupyter notebook alpaca_demo.ipynb
+jupyter notebook notebooks/alpaca_demo.ipynb
 ```
 
 The demo includes:
@@ -356,7 +373,7 @@ pip install -e .
 pip install pytest pytest-cov
 
 # Run tests
-pytest test_alpaca_connector.py
+pytest tests/
 ```
 
 ## License
