@@ -17,7 +17,7 @@ import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType, TimestampType
 
-from src.alpaca_connector import AlpacaHistoricalBarsConnector, create_connector
+from alpaca_pyspark.alpaca_connector import AlpacaHistoricalBarsConnector, create_connector
 
 
 class TestAlpacaHistoricalBarsConnector(unittest.TestCase):

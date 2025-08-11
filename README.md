@@ -40,7 +40,8 @@ The project is organized into the following directories:
 
 ```
 alpaca-pyspark/
-├── src/                    # Source code
+├── alpaca_pyspark/         # Python package
+│   ├── __init__.py         # Package initialization
 │   └── alpaca_connector.py # Main connector module
 ├── tests/                  # Test suite
 │   └── test_alpaca_connector.py
@@ -55,7 +56,7 @@ alpaca-pyspark/
 
 ```python
 from pyspark.sql import SparkSession
-from src.alpaca_connector import create_connector
+from alpaca_pyspark.alpaca_connector import create_connector
 import os
 
 # Set your API credentials
@@ -253,7 +254,7 @@ Run the comprehensive test suite:
 python -m pytest tests/ -v
 
 # Run with coverage
-python -m pytest tests/ --cov=src --cov-report=html
+python -m pytest tests/ --cov=alpaca_pyspark --cov-report=html
 ```
 
 ### Test Coverage
