@@ -1,99 +1,108 @@
-from typing import Optional, Generator
-import datetime as dt
+from typing import Union, Iterator, Tuple, Sequence, Dict, List
+
 import requests
-import urllib.parse as urlp
+from pyspark.sql.datasource import DataSource, DataSourceReader
+from pyspark.sql.types import StructType
 
-import pandas as pd
-
-# response to column mapping
-BAR_MAPPING = {
-    "t": "timestamp",
-    "o": "open",
-    "h": "high",
-    "l": "low",
-    "c": "close",
-    "v": "volume",
-    "n": "trade_count",
-    "vw": "vwap",
-}
+from .common import SymbolPartition, build_page_fetcher
 
 DEFAULT_DATA_ENDPOINT = "https://data.alpaca.markets/v2"
 
-# credentialsuration
-# apca_creds = {
-#   'key_id': "",
-#   'secret_key': ""
-# }
+##
+## Historical Bars
+##
+
+class HistoricalBarsDataSource(DataSource):
+
+    def __init__(self, options: Dict[str, str]) -> None:
+        super().__init__(options)
+        self.__validate_option(self.__params, options)
+
+    @classmethod
+    def name(cls) -> str:
+        return "Alpaca_HistoricalBars"
+
+    def schema(self) -> Union[StructType, str]:
+        return """
+        symbol: STRING,
+        time: TIMESTAMP,
+        open: FLOAT,
+        high: FLOAT,
+        low: FLOAT,
+        close: FLOAT,
+        volume: INT,
+        trade_count: INT,
+        vwap: FLOAT
+        """
+
+    def reader(self, schema: StructType) -> "DataSourceReader":
+        return HistoricalBarsReader(schema, self.options)
 
 
-def build_url(path_elements: list[str],
-              params: dict,
-              endpoint: str = DEFAULT_DATA_ENDPOINT,
-              page_token: Optional[str] = None) -> str:
-  # fold page token into params if present
-  if page_token:
-    params['page_token'] = page_token
+class HistoricalBarsReader(DataSourceReader):
 
-  # build URL
-  path = "/".join(path_elements)
-  param_str = "&".join([f"{k}={v}" for k, v in params.items()])
-  return f"{endpoint}/{path}?{param_str}"
+    def __init__(self, schema: StructType, options: Dict[str, str]) -> None:
+        super().__init__()
+        self.schema = schema
+        self.options = options
 
+    @property
+    def _headers(self) -> Dict[str, str]:
+        return {
+            'Content-Type': 'application/json',
+            'APCA-API-KEY-ID': self.options['APCA-API-KEY-ID'],
+            'APCA-API-SECRET-KEY': self.options['APCA-API-SECRET-KEY']
+          }
 
-def empty_bars() -> pd.DataFrame:
-  return pd.DataFrame(columns=BAR_MAPPING.values())
+    def _api_params(self) -> Dict[str, str]:
+        return {
+            "timeframe": self.options['timeframe'],
+            "start": self.options['start'],
+            "end": self.options['end'],
+            "limit": 1000
+          }
 
+    @property
+    def endpoint(self) -> str:
+        return self.options.get("endpoint", DEFAULT_DATA_ENDPOINT)
 
-def bars_to_pd(bars: dict) -> pd.DataFrame:
-  bars_pd = empty_bars()
-  for sym in bars.keys():
-    sym_bars = pd.DataFrame.from_records(bars[sym]).rename(columns=BAR_MAPPING)
-    sym_bars["symbol"] = sym
-    bars_pd = pd.concat([bars_pd, sym_bars], axis=0, sort=False)
-  return bars_pd
+    @property
+    def symbols(self) -> List[str]:
+        symbols = self.options.get("symbols", [])
+        if isinstance(symbols, str):
+            return [symbols]
+        return symbols
 
+    def partitions(self) -> Sequence[SymbolPartition]:
+        return [SymbolPartition(sym) for sym in self.symbols]
 
-def get_bars(symbol: str,
-             start_t: dt.datetime,
-             end_t: dt.datetime,
-             credentials: dict,
-             timeframe: str = '1Day',
-             limit: int = 1000) -> Generator[pd.DataFrame, None, None]:
-  headers = {
-    'Content-Type': 'application/json',
-    'APCA-API-KEY-ID': credentials['key_id'],
-    'APCA-API-SECRET-KEY': credentials['secret_key']
-  }
-  params = {
-    "symbols": symbol,
-    "timeframe": timeframe,
-    "start": urlp.quote(start_t.isoformat()),
-    "end": urlp.quote(end_t.isoformat()),
-    "limit": 1000
-  }
+    def __parse_bar(self, sym: str, bar: dict) -> tuple:
+        return (sym,) + tuple(bar.values())
 
-  def get_bars_page(sess: requests.Session, params: dict) -> dict:
-      response = sess.get(build_url(["stocks", "bars"], params), 
-                          headers=headers)
-      response.raise_for_status()
-      return response.json()
-
-  # iterate through pages in a session
-  with requests.Session() as sess:
-    # call the API
-    data = get_bars_page(sess, params)
-
-    # yield data from response
-    if "bars" in data and data["bars"]:
-      yield bars_to_pd(data["bars"])
-    else:
-      # return an empty dataframe if no data
-      yield empty_bars()
-
-    # iterate through pages
-    while "next_page_token" in data and data['next_page_token']:
-      params['page_token'] = data['next_page_token']
-      data = get_bars_page(sess, params)
-      if "bars" in data and data["bars"]:
-        yield bars_to_pd(data["bars"])
+    def read(self, partition: SymbolPartition) -> Iterator[Tuple]:
+        # set up the page fetcher function
+        get_bars_page = build_page_fetcher(self.endpoint, self._headers, ["stocks", "bars"])
+        # our base params
+        params = self._api_params()
+        # set the symbol from the partition
+        params['symbols'] = partition.symbol
+        # open a HTTP session
+        with requests.Session() as sess:
+            # tracking pages
+            num_pages = 0
+            pg = {}
+            next_page_token = None
+            # cycle through pages
+            while next_page_token or num_pages < 1:
+                # get the page
+                pg = get_bars_page(sess, params, next_page_token)
+                # process each bar
+                if "bars" in pg and pg["bars"]:
+                    bars = pg["bars"]
+                    for sym in bars.keys():
+                        for bar in bars[sym]:
+                            yield self.__parse_bar(sym, bar)
+                # go to next page
+                num_pages += 1
+                next_page_token = pg.get("next_page_token", None)
 
