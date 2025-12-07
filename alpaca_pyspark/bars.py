@@ -16,7 +16,6 @@ class HistoricalBarsDataSource(DataSource):
 
     def __init__(self, options: Dict[str, str]) -> None:
         super().__init__(options)
-        self.__validate_option(self.__params, options)
 
     @classmethod
     def name(cls) -> str:
