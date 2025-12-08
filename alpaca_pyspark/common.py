@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from pyspark.sql.datasource import InputPartition
-from requests import Session
+from requests import Session, HTTPError
 
 
 @dataclass
@@ -37,6 +37,7 @@ def build_page_fetcher(endpoint: str, headers: dict, path_elements: list[str]):
         if page_token:
             params['page_token'] = page_token
         response = sess.get(build_url(endpoint, path_elements, params), headers=headers)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPError(f"HTTP error {response.status_code} for {response.url}: {response.text}")
         return response.json()
     return get_page

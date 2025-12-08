@@ -1,4 +1,6 @@
 from typing import Union, Iterator, Tuple, Sequence, Dict, List
+from datetime import datetime as dt
+import ast
 
 import requests
 from pyspark.sql.datasource import DataSource, DataSourceReader
@@ -8,6 +10,17 @@ from .common import SymbolPartition, build_page_fetcher
 
 DEFAULT_DATA_ENDPOINT = "https://data.alpaca.markets/v2"
 
+bar_cols = [
+    "t", #timestamp
+    "o", #open
+    "h", #high
+    "l", #low
+    "c", #close
+    "v", #volume
+    "n", #trade_count
+    "vw" #vwap
+]
+
 ##
 ## Historical Bars
 ##
@@ -16,6 +29,7 @@ class HistoricalBarsDataSource(DataSource):
 
     def __init__(self, options: Dict[str, str]) -> None:
         super().__init__(options)
+        print(f"symbols is: *{self.options['symbols']}*")
 
     @classmethod
     def name(cls) -> str:
@@ -23,15 +37,15 @@ class HistoricalBarsDataSource(DataSource):
 
     def schema(self) -> Union[StructType, str]:
         return """
-        symbol: STRING,
-        time: TIMESTAMP,
-        open: FLOAT,
-        high: FLOAT,
-        low: FLOAT,
-        close: FLOAT,
-        volume: INT,
-        trade_count: INT,
-        vwap: FLOAT
+            symbol STRING,
+            time STRING,
+            open FLOAT,
+            high FLOAT,
+            low FLOAT,
+            close FLOAT,
+            volume INT,
+            trade_count INT,
+            vwap FLOAT
         """
 
     def reader(self, schema: StructType) -> "DataSourceReader":
@@ -69,14 +83,14 @@ class HistoricalBarsReader(DataSourceReader):
     def symbols(self) -> List[str]:
         symbols = self.options.get("symbols", [])
         if isinstance(symbols, str):
-            return [symbols]
+            return ast.literal_eval(symbols)
         return symbols
 
     def partitions(self) -> Sequence[SymbolPartition]:
         return [SymbolPartition(sym) for sym in self.symbols]
 
     def __parse_bar(self, sym: str, bar: dict) -> tuple:
-        return (sym,) + tuple(bar.values())
+        return (sym,) + tuple(bar[col_key] for col_key in bar_cols)
 
     def read(self, partition: SymbolPartition) -> Iterator[Tuple]:
         # set up the page fetcher function
