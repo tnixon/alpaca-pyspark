@@ -18,7 +18,6 @@ class HistoricalBarsDataSource(DataSource):
 
     def __init__(self, options: Dict[str, str]) -> None:
         super().__init__(options)
-        print(f"symbols is: *{self.options['symbols']}*")
 
     @classmethod
     def name(cls) -> str:
