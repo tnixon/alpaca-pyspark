@@ -150,13 +150,13 @@ class HistoricalBarsReader(DataSourceReader):
         return pa.schema([
             ("symbol", pa.string()),
             ("time", pa.timestamp('us')),  # microsecond precision
-            ("open", pa.float64()),
-            ("high", pa.float64()),
-            ("low", pa.float64()),
-            ("close", pa.float64()),
+            ("open", pa.float32()),
+            ("high", pa.float32()),
+            ("low", pa.float32()),
+            ("close", pa.float32()),
             ("volume", pa.int32()),
             ("trade_count", pa.int32()),
-            ("vwap", pa.float64())
+            ("vwap", pa.float32())
         ])
 
     def __parse_bar(self, sym: str, bar: Dict[str, Any]) -> Tuple[str, dt, float, float, float, float, int, int, float]:
@@ -218,13 +218,13 @@ class HistoricalBarsReader(DataSourceReader):
         return pa.RecordBatch.from_arrays([
             pa.array(symbols, type=pa.string()),
             pa.array(times, type=pa.timestamp('us')),
-            pa.array(opens, type=pa.float64()),
-            pa.array(highs, type=pa.float64()),
-            pa.array(lows, type=pa.float64()),
-            pa.array(closes, type=pa.float64()),
+            pa.array(opens, type=pa.float32()),
+            pa.array(highs, type=pa.float32()),
+            pa.array(lows, type=pa.float32()),
+            pa.array(closes, type=pa.float32()),
             pa.array(volumes, type=pa.int32()),
             pa.array(trade_counts, type=pa.int32()),
-            pa.array(vwaps, type=pa.float64())
+            pa.array(vwaps, type=pa.float32())
         ], schema=self.pyarrow_type)
 
     def read(self, partition: SymbolPartition) -> Iterator[pa.RecordBatch]:
