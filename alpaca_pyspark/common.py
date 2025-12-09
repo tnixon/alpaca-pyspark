@@ -86,25 +86,9 @@ def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: Li
         try:
             url = build_url(endpoint, path_elements, request_params)
             response = sess.get(url, headers=headers)
-            
+
             if not response.ok:
-                # Log error without exposing sensitive data
-                logger.error(f"HTTP {response.status_code} for {response.url}")
-                
-                # Create sanitized error message (avoid exposing sensitive data in response.text)
-                if response.status_code == 401:
-                    error_msg = "Authentication failed. Please check your API credentials."
-                elif response.status_code == 403:
-                    error_msg = "Access forbidden. Check your API permissions."
-                elif response.status_code == 429:
-                    error_msg = "Rate limit exceeded. Please retry after some time."
-                elif 400 <= response.status_code < 500:
-                    error_msg = f"Client error {response.status_code}. Check your request parameters."
-                else:
-                    error_msg = f"Server error {response.status_code}. Please try again later."
-                    
-                raise HTTPError(f"HTTP error {response.status_code}: {error_msg}")
-                
+              raise HTTPError(f"HTTP error {response.status_code} for {response.url}: {response.text}")
             return response.json()
             
         except RequestException as e:

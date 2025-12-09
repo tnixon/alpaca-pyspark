@@ -70,19 +70,18 @@ class HistoricalBarsDataSource(DataSource):
     def name(cls) -> str:
         return "Alpaca_HistoricalBars"
 
-    def schema(self) -> StructType:
-        """Return the schema for historical bars data."""
-        return StructType([
-            StructField("symbol", StringType(), False),
-            StructField("time", TimestampType(), False),
-            StructField("open", FloatType(), False),
-            StructField("high", FloatType(), False),
-            StructField("low", FloatType(), False),
-            StructField("close", FloatType(), False),
-            StructField("volume", IntegerType(), False),
-            StructField("trade_count", IntegerType(), False),
-            StructField("vwap", FloatType(), False),
-        ])
+    def schema(self) -> Union[StructType, str]:
+        return """
+            symbol STRING,
+            time TIMESTAMP,
+            open FLOAT,
+            high FLOAT,
+            low FLOAT,
+            close FLOAT,
+            volume INT,
+            trade_count INT,
+            vwap FLOAT
+        """
 
     def reader(self, schema: StructType) -> "DataSourceReader":
         return HistoricalBarsReader(schema, self.options)
