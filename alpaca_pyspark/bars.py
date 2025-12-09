@@ -1,99 +1,228 @@
-from typing import Optional, Generator
-import datetime as dt
+from typing import Union, Iterator, Tuple, Sequence, Dict, List, Any, Optional
+from datetime import datetime as dt
+import ast
+import logging
+from time import sleep
+
 import requests
-import urllib.parse as urlp
+from pyspark.sql.datasource import DataSource, DataSourceReader
+from pyspark.sql.types import StructType, StructField, StringType, TimestampType, FloatType, IntegerType
 
-import pandas as pd
+from .common import SymbolPartition, build_page_fetcher
 
-# response to column mapping
-BAR_MAPPING = {
-    "t": "timestamp",
-    "o": "open",
-    "h": "high",
-    "l": "low",
-    "c": "close",
-    "v": "volume",
-    "n": "trade_count",
-    "vw": "vwap",
-}
-
+# Constants
 DEFAULT_DATA_ENDPOINT = "https://data.alpaca.markets/v2"
+DEFAULT_LIMIT = 1000
+MAX_RETRIES = 3
+RETRY_DELAY = 1.0
 
-# credentialsuration
-# apca_creds = {
-#   'key_id': "",
-#   'secret_key': ""
-# }
+# Set up logger
+logger = logging.getLogger(__name__)
+
+##
+## Historical Bars
+##
+
+class HistoricalBarsDataSource(DataSource):
+    """PySpark DataSource for Alpaca's historical bars data.
+    
+    Required options:
+        - symbols: List of stock symbols or string representation of list
+        - APCA-API-KEY-ID: Alpaca API key ID
+        - APCA-API-SECRET-KEY: Alpaca API secret key
+        - timeframe: Time frame for bars (e.g., '1Day', '1Hour')
+        - start: Start date/time (ISO format)
+        - end: End date/time (ISO format)
+    
+    Optional options:
+        - endpoint: API endpoint URL (defaults to Alpaca's data endpoint)
+        - limit: Maximum number of bars per API call (default: 1000)
+    """
+
+    def __init__(self, options: Dict[str, str]) -> None:
+        super().__init__(options)
+        self._validate_options()
+        
+    def _validate_options(self) -> None:
+        """Validate that all required options are present and valid."""
+        required_options = ['symbols', 'APCA-API-KEY-ID', 'APCA-API-SECRET-KEY', 
+                          'timeframe', 'start', 'end']
+        missing = [opt for opt in required_options if opt not in self.options or not self.options[opt]]
+        if missing:
+            raise ValueError(f"Missing required options: {missing}")
+            
+        # Validate symbols format
+        symbols = self.options.get('symbols', [])
+        if isinstance(symbols, str):
+            try:
+                parsed_symbols = ast.literal_eval(symbols)
+                if not isinstance(parsed_symbols, (list, tuple)) or not parsed_symbols:
+                    raise ValueError("Symbols must be a non-empty list or tuple")
+            except (ValueError, SyntaxError) as e:
+                raise ValueError(f"Invalid symbols format '{symbols}'. Must be a valid Python list/tuple string.") from e
+        elif isinstance(symbols, (list, tuple)):
+            if not symbols:
+                raise ValueError("Symbols list cannot be empty")
+        else:
+            raise ValueError(f"Symbols must be a list, tuple, or string representation, got {type(symbols)}")
+
+    @classmethod
+    def name(cls) -> str:
+        return "Alpaca_HistoricalBars"
+
+    def schema(self) -> Union[StructType, str]:
+        return """
+            symbol STRING,
+            time TIMESTAMP,
+            open FLOAT,
+            high FLOAT,
+            low FLOAT,
+            close FLOAT,
+            volume INT,
+            trade_count INT,
+            vwap FLOAT
+        """
+
+    def reader(self, schema: StructType) -> "DataSourceReader":
+        return HistoricalBarsReader(schema, self.options)
 
 
-def build_url(path_elements: list[str],
-              params: dict,
-              endpoint: str = DEFAULT_DATA_ENDPOINT,
-              page_token: Optional[str] = None) -> str:
-  # fold page token into params if present
-  if page_token:
-    params['page_token'] = page_token
+class HistoricalBarsReader(DataSourceReader):
+    """Reader implementation for historical bars data source."""
 
-  # build URL
-  path = "/".join(path_elements)
-  param_str = "&".join([f"{k}={v}" for k, v in params.items()])
-  return f"{endpoint}/{path}?{param_str}"
+    def __init__(self, schema: StructType, options: Dict[str, str]) -> None:
+        super().__init__()
+        self.schema = schema
+        self.options = options
 
+    @property
+    def _headers(self) -> Dict[str, str]:
+        """Get HTTP headers for API requests."""
+        return {
+            'Content-Type': 'application/json',
+            'APCA-API-KEY-ID': self.options['APCA-API-KEY-ID'],
+            'APCA-API-SECRET-KEY': self.options['APCA-API-SECRET-KEY']
+        }
 
-def empty_bars() -> pd.DataFrame:
-  return pd.DataFrame(columns=BAR_MAPPING.values())
+    def _api_params(self) -> Dict[str, Any]:
+        """Get base API parameters for requests."""
+        return {
+            "timeframe": self.options['timeframe'],
+            "start": self.options['start'],
+            "end": self.options['end'],
+            "limit": int(self.options.get('limit', DEFAULT_LIMIT))
+        }
 
+    @property
+    def endpoint(self) -> str:
+        """Get API endpoint URL."""
+        return self.options.get("endpoint", DEFAULT_DATA_ENDPOINT)
 
-def bars_to_pd(bars: dict) -> pd.DataFrame:
-  bars_pd = empty_bars()
-  for sym in bars.keys():
-    sym_bars = pd.DataFrame.from_records(bars[sym]).rename(columns=BAR_MAPPING)
-    sym_bars["symbol"] = sym
-    bars_pd = pd.concat([bars_pd, sym_bars], axis=0, sort=False)
-  return bars_pd
+    @property
+    def symbols(self) -> List[str]:
+        """Get the list of symbols to fetch data for."""
+        symbols = self.options.get("symbols", [])
+        if isinstance(symbols, str):
+            try:
+                parsed_symbols = ast.literal_eval(symbols)
+                if not isinstance(parsed_symbols, (list, tuple)):
+                    raise ValueError("Symbols must be a list or tuple")
+                return list(parsed_symbols)
+            except (ValueError, SyntaxError) as e:
+                raise ValueError(f"Invalid symbols format '{symbols}'. Must be a valid Python list/tuple string.") from e
+        elif isinstance(symbols, (list, tuple)):
+            return list(symbols)
+        else:
+            raise ValueError(f"Symbols must be a list, tuple, or string representation, got {type(symbols)}")
 
+    def partitions(self) -> Sequence[SymbolPartition]:
+        """Create partitions for parallel processing, one per symbol."""
+        symbol_list = self.symbols
+        if not symbol_list:
+            raise ValueError("No symbols provided for data fetching")
+        return [SymbolPartition(sym) for sym in symbol_list]
 
-def get_bars(symbol: str,
-             start_t: dt.datetime,
-             end_t: dt.datetime,
-             credentials: dict,
-             timeframe: str = '1Day',
-             limit: int = 1000) -> Generator[pd.DataFrame, None, None]:
-  headers = {
-    'Content-Type': 'application/json',
-    'APCA-API-KEY-ID': credentials['key_id'],
-    'APCA-API-SECRET-KEY': credentials['secret_key']
-  }
-  params = {
-    "symbols": symbol,
-    "timeframe": timeframe,
-    "start": urlp.quote(start_t.isoformat()),
-    "end": urlp.quote(end_t.isoformat()),
-    "limit": 1000
-  }
+    def __parse_bar(self, sym: str, bar: Dict[str, Any]) -> Tuple[str, dt, float, float, float, float, int, int, float]:
+        """Parse a single bar from API response into tuple format.
+        
+        Args:
+            sym: Stock symbol
+            bar: Bar data dictionary from API response
+            
+        Returns:
+            Tuple containing parsed bar data
+            
+        Raises:
+            ValueError: If bar data is malformed or missing required fields
+        """
+        try:
+            return (
+                sym,
+                dt.fromisoformat(bar["t"]),
+                float(bar["o"]),
+                float(bar["h"]),
+                float(bar["l"]),
+                float(bar["c"]),
+                int(bar["v"]),
+                int(bar["n"]),
+                float(bar["vw"])
+            )
+        except (KeyError, ValueError, TypeError) as e:
+            raise ValueError(f"Failed to parse bar data for symbol {sym}: {bar}. Error: {e}") from e
 
-  def get_bars_page(sess: requests.Session, params: dict) -> dict:
-      response = sess.get(build_url(["stocks", "bars"], params), 
-                          headers=headers)
-      response.raise_for_status()
-      return response.json()
-
-  # iterate through pages in a session
-  with requests.Session() as sess:
-    # call the API
-    data = get_bars_page(sess, params)
-
-    # yield data from response
-    if "bars" in data and data["bars"]:
-      yield bars_to_pd(data["bars"])
-    else:
-      # return an empty dataframe if no data
-      yield empty_bars()
-
-    # iterate through pages
-    while "next_page_token" in data and data['next_page_token']:
-      params['page_token'] = data['next_page_token']
-      data = get_bars_page(sess, params)
-      if "bars" in data and data["bars"]:
-        yield bars_to_pd(data["bars"])
+    def read(self, partition: SymbolPartition) -> Iterator[Tuple[str, dt, float, float, float, float, int, int, float]]:
+        """Read historical bars data for a single symbol partition.
+        
+        Args:
+            partition: Symbol partition to read data for
+            
+        Yields:
+            Tuples containing parsed bar data
+        """
+        # Set up the page fetcher function with enhanced error handling
+        get_bars_page = build_page_fetcher(self.endpoint, self._headers, ["stocks", "bars"])
+        # Our base params
+        params = self._api_params()
+        # Set the symbol from the partition
+        params['symbols'] = partition.symbol
+        
+        # Configure session with timeout
+        with requests.Session() as sess:
+            sess.timeout = (10.0, 30.0)  # (connect_timeout, read_timeout)
+            
+            # Tracking pages
+            num_pages = 0
+            next_page_token: Optional[str] = None
+            
+            # Cycle through pages
+            while next_page_token or num_pages < 1:
+                retry_count = 0
+                while retry_count < MAX_RETRIES:
+                    try:
+                        # Get the page with retry logic
+                        pg = get_bars_page(sess, params, next_page_token)
+                        break  # Success, exit retry loop
+                    except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+                        retry_count += 1
+                        if retry_count >= MAX_RETRIES:
+                            logger.error(f"Failed to fetch data for symbol {partition.symbol} after {MAX_RETRIES} retries: {e}")
+                            raise ValueError(f"API request failed for symbol {partition.symbol} after {MAX_RETRIES} retries") from e
+                        
+                        logger.warning(f"Retry {retry_count} for symbol {partition.symbol}: {e}")
+                        sleep(RETRY_DELAY * retry_count)  # Exponential backoff
+                
+                # Process each bar
+                if "bars" in pg and pg["bars"]:
+                    bars = pg["bars"]
+                    for sym in bars.keys():
+                        for bar in bars[sym]:
+                            try:
+                                yield self.__parse_bar(sym, bar)
+                            except ValueError as e:
+                                logger.warning(f"Skipping malformed bar for {sym}: {e}")
+                                continue
+                
+                # Go to next page
+                num_pages += 1
+                next_page_token = pg.get("next_page_token", None)
 

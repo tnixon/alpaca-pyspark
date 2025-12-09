@@ -1,1 +1,1 @@
-from .bars import get_bars
+from .bars import HistoricalBarsDataSource
