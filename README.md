@@ -154,6 +154,58 @@ poetry build
 
 This creates distribution packages in the `dist/` directory.
 
+### Linting and Code Quality
+
+The project uses several tools to maintain code quality. Run these checks before committing:
+
+#### Code Formatting with Black
+
+Format all Python files:
+
+```bash
+poetry run black alpaca_pyspark/
+```
+
+Check formatting without making changes:
+
+```bash
+poetry run black --check alpaca_pyspark/
+```
+
+#### Linting with Flake8
+
+Check for code style issues:
+
+```bash
+poetry run flake8 alpaca_pyspark/
+```
+
+#### Type Checking with MyPy
+
+Verify type hints and type safety:
+
+```bash
+poetry run mypy alpaca_pyspark/
+```
+
+#### Running All Checks
+
+Run all quality checks at once:
+
+```bash
+poetry run black --check alpaca_pyspark/ && \
+poetry run flake8 alpaca_pyspark/ && \
+poetry run mypy alpaca_pyspark/
+```
+
+#### Running Tests
+
+Execute the test suite:
+
+```bash
+poetry run pytest
+```
+
 ## Architecture
 
 ### Parallel Processing
