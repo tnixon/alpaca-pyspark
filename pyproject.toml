@@ -11,6 +11,7 @@ license = "LICENSE"
 python = "^3.11"
 pandas = "^2.0.0"
 requests = "^2.31.0"
+types-requests = "^2.31.0"
 pyspark = "^4.0.0"
 
 [tool.poetry.group.dev.dependencies]
