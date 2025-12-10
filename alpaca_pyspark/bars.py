@@ -120,20 +120,17 @@ class HistoricalBarsReader(DataSourceReader):
 
     @property
     def symbols(self) -> List[str]:
-        """Get the list of symbols to fetch data for."""
+        """Get the list of symbols to fetch data for.
+
+        Note: Symbol validation occurs in HistoricalBarsDataSource._validate_options()
+        """
         symbols = self.options.get("symbols", [])
         if isinstance(symbols, str):
-            try:
-                parsed_symbols = ast.literal_eval(symbols)
-                if not isinstance(parsed_symbols, (list, tuple)):
-                    raise ValueError("Symbols must be a list or tuple")
-                return list(parsed_symbols)
-            except (ValueError, SyntaxError) as e:
-                raise ValueError(f"Invalid symbols format '{symbols}'. Must be a valid Python list/tuple string.") from e
-        elif isinstance(symbols, (list, tuple)):
-            return list(symbols)
+            # Parse string representation (already validated in DataSource)
+            return list(ast.literal_eval(symbols))
         else:
-            raise ValueError(f"Symbols must be a list, tuple, or string representation, got {type(symbols)}")
+            # Already a list/tuple (already validated in DataSource)
+            return list(symbols)
 
     def partitions(self) -> Sequence[SymbolPartition]:
         """Create partitions for parallel processing, one per symbol."""
