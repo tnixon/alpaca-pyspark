@@ -1,12 +1,12 @@
-from typing import Union, Iterator, Tuple, Sequence, Dict, List, Any, Optional
-from datetime import datetime as dt
 import ast
 import logging
+from datetime import datetime as dt
 from time import sleep
+from typing import Union, Iterator, Tuple, Sequence, Dict, List, Any, Optional
 
 import requests
-from pyspark.sql.datasource import DataSource, DataSourceReader
-from pyspark.sql.types import StructType, StructField, StringType, TimestampType, FloatType, IntegerType
+from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+from pyspark.sql.types import StructType
 
 from .common import SymbolPartition, build_page_fetcher
 
@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 ##
 ## Historical Bars
 ##
+
+Symbols_Option_Type = Union[str, List[str], Tuple[str, ...]]
 
 class HistoricalBarsDataSource(DataSource):
     """PySpark DataSource for Alpaca's historical bars data.
@@ -52,7 +54,7 @@ class HistoricalBarsDataSource(DataSource):
             raise ValueError(f"Missing required options: {missing}")
             
         # Validate symbols format
-        symbols = self.options.get('symbols', [])
+        symbols: Symbols_Option_Type = self.options.get('symbols', [])
         if isinstance(symbols, str):
             try:
                 parsed_symbols = ast.literal_eval(symbols)
@@ -124,7 +126,7 @@ class HistoricalBarsReader(DataSourceReader):
 
         Note: Symbol validation occurs in HistoricalBarsDataSource._validate_options()
         """
-        symbols = self.options.get("symbols", [])
+        symbols: Symbols_Option_Type = self.options.get("symbols", [])
         if isinstance(symbols, str):
             # Parse string representation (already validated in DataSource)
             return list(ast.literal_eval(symbols))
@@ -167,15 +169,19 @@ class HistoricalBarsReader(DataSourceReader):
         except (KeyError, ValueError, TypeError) as e:
             raise ValueError(f"Failed to parse bar data for symbol {sym}: {bar}. Error: {e}") from e
 
-    def read(self, partition: SymbolPartition) -> Iterator[Tuple[str, dt, float, float, float, float, int, int, float]]:
+    def read(self, partition: InputPartition) -> Iterator[Tuple[str, dt, float, float, float, float, int, int, float]]:
         """Read historical bars data for a single symbol partition.
-        
+
         Args:
             partition: Symbol partition to read data for
-            
+
         Yields:
             Tuples containing parsed bar data
         """
+        # Ensure partition is SymbolPartition
+        if not isinstance(partition, SymbolPartition):
+            raise ValueError(f"Expected SymbolPartition, got {type(partition)}")
+
         # Set up the page fetcher function with enhanced error handling
         get_bars_page = build_page_fetcher(self.endpoint, self._headers, ["stocks", "bars"])
         # Our base params
@@ -183,10 +189,8 @@ class HistoricalBarsReader(DataSourceReader):
         # Set the symbol from the partition
         params['symbols'] = partition.symbol
         
-        # Configure session with timeout
+        # Configure session
         with requests.Session() as sess:
-            sess.timeout = (10.0, 30.0)  # (connect_timeout, read_timeout)
-            
             # Tracking pages
             num_pages = 0
             next_page_token: Optional[str] = None

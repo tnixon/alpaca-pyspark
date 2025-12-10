@@ -85,7 +85,7 @@ def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: Li
             
         try:
             url = build_url(endpoint, path_elements, request_params)
-            response = sess.get(url, headers=headers)
+            response = sess.get(url, headers=headers, timeout=(10.0, 30.0))
 
             if not response.ok:
               raise HTTPError(f"HTTP error {response.status_code} for {response.url}: {response.text}")
