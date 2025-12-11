@@ -158,18 +158,18 @@ This creates distribution packages in the `dist/` directory.
 
 The project uses several tools to maintain code quality. Run these checks before committing:
 
-#### Code Formatting with Black
+#### Code Formatting with YAPF
 
 Format all Python files:
 
 ```bash
-poetry run black alpaca_pyspark/
+poetry run yapf -ir alpaca_pyspark/
 ```
 
 Check formatting without making changes:
 
 ```bash
-poetry run black --check alpaca_pyspark/
+poetry run yapf --diff --recursive alpaca_pyspark/
 ```
 
 #### Linting with Flake8
@@ -193,7 +193,7 @@ poetry run mypy alpaca_pyspark/
 Run all quality checks at once:
 
 ```bash
-poetry run black --check alpaca_pyspark/ && \
+poetry run yapf --diff --recursive alpaca_pyspark/ && \
 poetry run flake8 alpaca_pyspark/ && \
 poetry run mypy alpaca_pyspark/
 ```
