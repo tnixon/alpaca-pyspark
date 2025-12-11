@@ -15,9 +15,7 @@ class SymbolPartition(InputPartition):
     symbol: str
 
 
-def build_url(endpoint: str,
-              path_elements: List[str],
-              params: Dict[str, Any]) -> str:
+def build_url(endpoint: str, path_elements: List[str], params: Dict[str, Any]) -> str:
     """Build a properly encoded URL from components.
 
     Args:

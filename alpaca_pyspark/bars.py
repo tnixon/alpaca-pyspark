@@ -48,8 +48,7 @@ class HistoricalBarsDataSource(DataSource):
 
     def _validate_options(self) -> None:
         """Validate that all required options are present and valid."""
-        required_options = ['symbols', 'APCA-API-KEY-ID', 'APCA-API-SECRET-KEY',
-                            'timeframe', 'start', 'end']
+        required_options = ['symbols', 'APCA-API-KEY-ID', 'APCA-API-SECRET-KEY', 'timeframe', 'start', 'end']
         missing = [opt for opt in required_options if opt not in self.options or not self.options[opt]]
         if missing:
             raise ValueError(f"Missing required options: {missing}")
@@ -62,8 +61,10 @@ class HistoricalBarsDataSource(DataSource):
                 if not isinstance(parsed_symbols, (list, tuple)) or not parsed_symbols:
                     raise ValueError("Symbols must be a non-empty list or tuple")
             except (ValueError, SyntaxError) as e:
-                raise ValueError(f"Invalid symbols format '{symbols}'. "
-                                 f"Must be a valid Python list/tuple string.") from e
+                raise ValueError(
+                    f"Invalid symbols format '{symbols}'. "
+                    f"Must be a valid Python list/tuple string."
+                ) from e
         elif isinstance(symbols, (list, tuple)):
             if not symbols:
                 raise ValueError("Symbols list cannot be empty")
@@ -160,15 +161,8 @@ class HistoricalBarsReader(DataSourceReader):
         """
         try:
             return (
-                sym,
-                dt.fromisoformat(bar["t"]),
-                float(bar["o"]),
-                float(bar["h"]),
-                float(bar["l"]),
-                float(bar["c"]),
-                int(bar["v"]),
-                int(bar["n"]),
-                float(bar["vw"])
+                sym, dt.fromisoformat(bar["t"]), float(bar["o"]), float(bar["h"]), float(bar["l"]), float(bar["c"]),
+                int(bar["v"]), int(bar["n"]), float(bar["vw"])
             )
         except (KeyError, ValueError, TypeError) as e:
             raise ValueError(f"Failed to parse bar data for symbol {sym}: {bar}. Error: {e}") from e
@@ -211,9 +205,11 @@ class HistoricalBarsReader(DataSourceReader):
                         retry_count += 1
                         if retry_count >= MAX_RETRIES:
                             logger.error(
-                                f"Failed to fetch data for symbol {partition.symbol} after {MAX_RETRIES} retries: {e}")
+                                f"Failed to fetch data for symbol {partition.symbol} after {MAX_RETRIES} retries: {e}"
+                            )
                             raise ValueError(
-                                f"API request failed for symbol {partition.symbol} after {MAX_RETRIES} retries") from e
+                                f"API request failed for symbol {partition.symbol} after {MAX_RETRIES} retries"
+                            ) from e
 
                         logger.warning(f"Retry {retry_count} for symbol {partition.symbol}: {e}")
                         sleep(RETRY_DELAY * retry_count)  # Exponential backoff
