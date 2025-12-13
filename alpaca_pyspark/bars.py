@@ -13,10 +13,9 @@ from .common import build_page_fetcher, SymbolPartition
 
 # Constants
 DEFAULT_DATA_ENDPOINT = "https://data.alpaca.markets/v2"
-DEFAULT_LIMIT = 1000
+DEFAULT_LIMIT = 10000
 MAX_RETRIES = 3
 RETRY_DELAY = 1.0
-ARROW_BATCH_SIZE = 10000  # Number of rows per Arrow RecordBatch
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -221,14 +220,14 @@ class HistoricalBarsReader(DataSourceReader):
     def read(self, partition: InputPartition) -> Iterator[pa.RecordBatch]:
         """Read historical bars data for a single symbol partition.
 
-        Uses PyArrow batching for improved performance by yielding RecordBatch
-        objects instead of individual tuples.
+        Each API page is yielded as a single PyArrow RecordBatch. The batch size
+        corresponds to the 'limit' parameter used for API requests.
 
         Args:
             partition: Symbol partition to read data for
 
         Yields:
-            PyArrow RecordBatch objects containing batched bar data
+            PyArrow RecordBatch objects, one per API page
         """
         # Ensure partition is SymbolPartition
         if not isinstance(partition, SymbolPartition):
@@ -241,18 +240,7 @@ class HistoricalBarsReader(DataSourceReader):
         # Set the symbol from the partition
         params['symbols'] = partition.symbol
 
-        # Accumulate bars into lists for batching
-        symbols: List[str] = []
-        times: List[dt] = []
-        opens: List[float] = []
-        highs: List[float] = []
-        lows: List[float] = []
-        closes: List[float] = []
-        volumes: List[int] = []
-        trade_counts: List[int] = []
-        vwaps: List[float] = []
-
-        # Configure session with timeout
+        # Configure session
         with requests.Session() as sess:
             # Tracking pages
             num_pages = 0
@@ -279,13 +267,24 @@ class HistoricalBarsReader(DataSourceReader):
                         logger.warning(f"Retry {retry_count} for symbol {partition.symbol}: {e}")
                         sleep(RETRY_DELAY * retry_count)  # Exponential backoff
 
-                # Process each bar
+                # Process page as a single batch
                 if "bars" in pg and pg["bars"]:
+                    # Accumulate bars from this page
+                    symbols: List[str] = []
+                    times: List[dt] = []
+                    opens: List[float] = []
+                    highs: List[float] = []
+                    lows: List[float] = []
+                    closes: List[float] = []
+                    volumes: List[int] = []
+                    trade_counts: List[int] = []
+                    vwaps: List[float] = []
+
                     bars = pg["bars"]
                     for sym in bars.keys():
                         for bar in bars[sym]:
                             try:
-                                # Parse bar and add to batch lists
+                                # Parse bar and add to page lists
                                 parsed = self.__parse_bar(sym, bar)
                                 symbols.append(parsed[0])
                                 times.append(parsed[1])
@@ -296,32 +295,16 @@ class HistoricalBarsReader(DataSourceReader):
                                 volumes.append(parsed[6])
                                 trade_counts.append(parsed[7])
                                 vwaps.append(parsed[8])
-
-                                # Yield batch when reaching batch size
-                                if len(symbols) >= ARROW_BATCH_SIZE:
-                                    yield self._create_record_batch(
-                                        symbols, times, opens, highs, lows, closes, volumes, trade_counts, vwaps
-                                    )
-                                    # Clear lists for next batch
-                                    symbols = []
-                                    times = []
-                                    opens = []
-                                    highs = []
-                                    lows = []
-                                    closes = []
-                                    volumes = []
-                                    trade_counts = []
-                                    vwaps = []
                             except ValueError as e:
                                 logger.warning(f"Skipping malformed bar for {sym}: {e}")
                                 continue
 
+                    # Yield the entire page as one batch
+                    if symbols:
+                        yield self._create_record_batch(
+                            symbols, times, opens, highs, lows, closes, volumes, trade_counts, vwaps
+                        )
+
                 # Go to next page
                 num_pages += 1
                 next_page_token = pg.get("next_page_token", None)
-
-            # Yield any remaining data as final batch
-            if symbols:
-                yield self._create_record_batch(
-                    symbols, times, opens, highs, lows, closes, volumes, trade_counts, vwaps
-                )
