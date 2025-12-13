@@ -1,15 +1,15 @@
-from typing import Union, Iterator, Tuple, Sequence, Dict, List, Any, Optional
-from datetime import datetime as dt
 import ast
 import logging
+from datetime import datetime as dt
 from time import sleep
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
-import requests
 import pyarrow as pa
+import requests
 from pyspark.sql.datasource import DataSource, DataSourceReader
-from pyspark.sql.types import StructType, StructField, StringType, TimestampType, FloatType, IntegerType
+from pyspark.sql.types import StructType
 
-from .common import SymbolPartition, build_page_fetcher
+from .common import build_page_fetcher, SymbolPartition
 
 # Constants
 DEFAULT_DATA_ENDPOINT = "https://data.alpaca.markets/v2"
@@ -21,13 +21,16 @@ ARROW_BATCH_SIZE = 10000  # Number of rows per Arrow RecordBatch
 # Set up logger
 logger = logging.getLogger(__name__)
 
-##
-## Historical Bars
-##
+#
+# Historical Bars
+#
+
+Symbols_Option_Type = Union[str, List[str], Tuple[str, ...]]
+
 
 class HistoricalBarsDataSource(DataSource):
     """PySpark DataSource for Alpaca's historical bars data.
-    
+
     Required options:
         - symbols: List of stock symbols or string representation of list
         - APCA-API-KEY-ID: Alpaca API key ID
@@ -35,7 +38,7 @@ class HistoricalBarsDataSource(DataSource):
         - timeframe: Time frame for bars (e.g., '1Day', '1Hour')
         - start: Start date/time (ISO format)
         - end: End date/time (ISO format)
-    
+
     Optional options:
         - endpoint: API endpoint URL (defaults to Alpaca's data endpoint)
         - limit: Maximum number of bars per API call (default: 1000)
@@ -44,29 +47,32 @@ class HistoricalBarsDataSource(DataSource):
     def __init__(self, options: Dict[str, str]) -> None:
         super().__init__(options)
         self._validate_options()
-        
+
     def _validate_options(self) -> None:
         """Validate that all required options are present and valid."""
-        required_options = ['symbols', 'APCA-API-KEY-ID', 'APCA-API-SECRET-KEY', 
-                          'timeframe', 'start', 'end']
+        required_options = ['symbols', 'APCA-API-KEY-ID', 'APCA-API-SECRET-KEY', 'timeframe', 'start', 'end']
         missing = [opt for opt in required_options if opt not in self.options or not self.options[opt]]
         if missing:
             raise ValueError(f"Missing required options: {missing}")
-            
+
         # Validate symbols format
-        symbols = self.options.get('symbols', [])
+        symbols: Symbols_Option_Type = self.options.get('symbols', [])
         if isinstance(symbols, str):
             try:
                 parsed_symbols = ast.literal_eval(symbols)
                 if not isinstance(parsed_symbols, (list, tuple)) or not parsed_symbols:
                     raise ValueError("Symbols must be a non-empty list or tuple")
             except (ValueError, SyntaxError) as e:
-                raise ValueError(f"Invalid symbols format '{symbols}'. Must be a valid Python list/tuple string.") from e
+                raise ValueError(
+                    f"Invalid symbols format '{symbols}'. "
+                    f"Must be a valid Python list/tuple string."
+                ) from e
         elif isinstance(symbols, (list, tuple)):
             if not symbols:
                 raise ValueError("Symbols list cannot be empty")
         else:
-            raise ValueError(f"Symbols must be a list, tuple, or string representation, got {type(symbols)}")
+            raise ValueError(f"Symbols must be a list, tuple, "
+                             f"or string representation, got {type(symbols)}")
 
     @classmethod
     def name(cls) -> str:
@@ -122,20 +128,17 @@ class HistoricalBarsReader(DataSourceReader):
 
     @property
     def symbols(self) -> List[str]:
-        """Get the list of symbols to fetch data for."""
-        symbols = self.options.get("symbols", [])
+        """Get the list of symbols to fetch data for.
+
+        Note: Symbol validation occurs in HistoricalBarsDataSource._validate_options()
+        """
+        symbols: Symbols_Option_Type = self.options.get("symbols", [])
         if isinstance(symbols, str):
-            try:
-                parsed_symbols = ast.literal_eval(symbols)
-                if not isinstance(parsed_symbols, (list, tuple)):
-                    raise ValueError("Symbols must be a list or tuple")
-                return list(parsed_symbols)
-            except (ValueError, SyntaxError) as e:
-                raise ValueError(f"Invalid symbols format '{symbols}'. Must be a valid Python list/tuple string.") from e
-        elif isinstance(symbols, (list, tuple)):
-            return list(symbols)
+            # Parse string representation (already validated in DataSource)
+            return list(ast.literal_eval(symbols))
         else:
-            raise ValueError(f"Symbols must be a list, tuple, or string representation, got {type(symbols)}")
+            # Already a list/tuple (already validated in DataSource)
+            return list(symbols)
 
     def partitions(self) -> Sequence[SymbolPartition]:
         """Create partitions for parallel processing, one per symbol."""
@@ -159,30 +162,24 @@ class HistoricalBarsReader(DataSourceReader):
             ("vwap", pa.float32())
         ])
 
-    def __parse_bar(self, sym: str, bar: Dict[str, Any]) -> Tuple[str, dt, float, float, float, float, int, int, float]:
+    def __parse_bar(self, sym: str, bar: Dict[str, Any]) -> \
+            Tuple[str, dt, float, float, float, float, int, int, float]:
         """Parse a single bar from API response into tuple format.
-        
+
         Args:
             sym: Stock symbol
             bar: Bar data dictionary from API response
-            
+
         Returns:
             Tuple containing parsed bar data
-            
+
         Raises:
             ValueError: If bar data is malformed or missing required fields
         """
         try:
             return (
-                sym,
-                dt.fromisoformat(bar["t"]),
-                float(bar["o"]),
-                float(bar["h"]),
-                float(bar["l"]),
-                float(bar["c"]),
-                int(bar["v"]),
-                int(bar["n"]),
-                float(bar["vw"])
+                sym, dt.fromisoformat(bar["t"]), float(bar["o"]), float(bar["h"]), float(bar["l"]), float(bar["c"]),
+                int(bar["v"]), int(bar["n"]), float(bar["vw"])
             )
         except (KeyError, ValueError, TypeError) as e:
             raise ValueError(f"Failed to parse bar data for symbol {sym}: {bar}. Error: {e}") from e
@@ -239,6 +236,10 @@ class HistoricalBarsReader(DataSourceReader):
         Yields:
             PyArrow RecordBatch objects containing batched bar data
         """
+        # Ensure partition is SymbolPartition
+        if not isinstance(partition, SymbolPartition):
+            raise ValueError(f"Expected SymbolPartition, got {type(partition)}")
+
         # Set up the page fetcher function with enhanced error handling
         get_bars_page = build_page_fetcher(self.endpoint, self._headers, ["stocks", "bars"])
         # Our base params
@@ -276,8 +277,12 @@ class HistoricalBarsReader(DataSourceReader):
                     except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
                         retry_count += 1
                         if retry_count >= MAX_RETRIES:
-                            logger.error(f"Failed to fetch data for symbol {partition.symbol} after {MAX_RETRIES} retries: {e}")
-                            raise ValueError(f"API request failed for symbol {partition.symbol} after {MAX_RETRIES} retries") from e
+                            logger.error(
+                                f"Failed to fetch data for symbol {partition.symbol} after {MAX_RETRIES} retries: {e}"
+                            )
+                            raise ValueError(
+                                f"API request failed for symbol {partition.symbol} after {MAX_RETRIES} retries"
+                            ) from e
 
                         logger.warning(f"Retry {retry_count} for symbol {partition.symbol}: {e}")
                         sleep(RETRY_DELAY * retry_count)  # Exponential backoff
