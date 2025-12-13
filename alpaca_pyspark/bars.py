@@ -4,6 +4,7 @@ from datetime import datetime as dt
 from time import sleep
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
+import pyarrow as pa
 import requests
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.types import StructType
@@ -12,7 +13,7 @@ from .common import build_page_fetcher, SymbolPartition
 
 # Constants
 DEFAULT_DATA_ENDPOINT = "https://data.alpaca.markets/v2"
-DEFAULT_LIMIT = 1000
+DEFAULT_LIMIT = 10000
 MAX_RETRIES = 3
 RETRY_DELAY = 1.0
 
@@ -145,6 +146,22 @@ class HistoricalBarsReader(DataSourceReader):
             raise ValueError("No symbols provided for data fetching")
         return [SymbolPartition(sym) for sym in symbol_list]
 
+    @property
+    def pyarrow_type(self) -> pa.Schema:
+        """Return PyArrow schema for direct Arrow batch support."""
+        cols: List[tuple[str, pa.DataType]] = [
+            ("symbol", pa.string()),
+            ("time", pa.timestamp('us')),  # microsecond precision
+            ("open", pa.float32()),
+            ("high", pa.float32()),
+            ("low", pa.float32()),
+            ("close", pa.float32()),
+            ("volume", pa.int32()),
+            ("trade_count", pa.int32()),
+            ("vwap", pa.float32())
+        ]
+        return pa.schema(cols)
+
     def __parse_bar(self, sym: str, bar: Dict[str, Any]) -> \
             Tuple[str, dt, float, float, float, float, int, int, float]:
         """Parse a single bar from API response into tuple format.
@@ -167,14 +184,50 @@ class HistoricalBarsReader(DataSourceReader):
         except (KeyError, ValueError, TypeError) as e:
             raise ValueError(f"Failed to parse bar data for symbol {sym}: {bar}. Error: {e}") from e
 
-    def read(self, partition: InputPartition) -> Iterator[Tuple[str, dt, float, float, float, float, int, int, float]]:
+    def _create_record_batch(
+        self, symbols: List[str], times: List[dt], opens: List[float], highs: List[float], lows: List[float],
+        closes: List[float], volumes: List[int], trade_counts: List[int], vwaps: List[float]
+    ) -> pa.RecordBatch:
+        """Create a PyArrow RecordBatch from accumulated bar data.
+
+        Args:
+            symbols: List of stock symbols
+            times: List of timestamps
+            opens: List of open prices
+            highs: List of high prices
+            lows: List of low prices
+            closes: List of close prices
+            volumes: List of volumes
+            trade_counts: List of trade counts
+            vwaps: List of VWAP values
+
+        Returns:
+            PyArrow RecordBatch with the bar data
+        """
+        return pa.RecordBatch.from_arrays([
+            pa.array(symbols, type=pa.string()),
+            pa.array(times, type=pa.timestamp('us')),
+            pa.array(opens, type=pa.float32()),
+            pa.array(highs, type=pa.float32()),
+            pa.array(lows, type=pa.float32()),
+            pa.array(closes, type=pa.float32()),
+            pa.array(volumes, type=pa.int32()),
+            pa.array(trade_counts, type=pa.int32()),
+            pa.array(vwaps, type=pa.float32())
+        ],
+                                          schema=self.pyarrow_type)
+
+    def read(self, partition: InputPartition) -> Iterator[pa.RecordBatch]:
         """Read historical bars data for a single symbol partition.
+
+        Each API page is yielded as a single PyArrow RecordBatch. The batch size
+        corresponds to the 'limit' parameter used for API requests.
 
         Args:
             partition: Symbol partition to read data for
 
         Yields:
-            Tuples containing parsed bar data
+            PyArrow RecordBatch objects, one per API page
         """
         # Ensure partition is SymbolPartition
         if not isinstance(partition, SymbolPartition):
@@ -214,16 +267,43 @@ class HistoricalBarsReader(DataSourceReader):
                         logger.warning(f"Retry {retry_count} for symbol {partition.symbol}: {e}")
                         sleep(RETRY_DELAY * retry_count)  # Exponential backoff
 
-                # Process each bar
+                # Process page as a single batch
                 if "bars" in pg and pg["bars"]:
+                    # Accumulate bars from this page
+                    symbols: List[str] = []
+                    times: List[dt] = []
+                    opens: List[float] = []
+                    highs: List[float] = []
+                    lows: List[float] = []
+                    closes: List[float] = []
+                    volumes: List[int] = []
+                    trade_counts: List[int] = []
+                    vwaps: List[float] = []
+
                     bars = pg["bars"]
                     for sym in bars.keys():
                         for bar in bars[sym]:
                             try:
-                                yield self.__parse_bar(sym, bar)
+                                # Parse bar and add to page lists
+                                parsed = self.__parse_bar(sym, bar)
+                                symbols.append(parsed[0])
+                                times.append(parsed[1])
+                                opens.append(parsed[2])
+                                highs.append(parsed[3])
+                                lows.append(parsed[4])
+                                closes.append(parsed[5])
+                                volumes.append(parsed[6])
+                                trade_counts.append(parsed[7])
+                                vwaps.append(parsed[8])
                             except ValueError as e:
                                 logger.warning(f"Skipping malformed bar for {sym}: {e}")
                                 continue
+
+                    # Yield the entire page as one batch
+                    if symbols:
+                        yield self._create_record_batch(
+                            symbols, times, opens, highs, lows, closes, volumes, trade_counts, vwaps
+                        )
 
                 # Go to next page
                 num_pages += 1
