@@ -150,7 +150,7 @@ class HistoricalBarsReader(DataSourceReader):
     @property
     def pyarrow_type(self) -> pa.Schema:
         """Return PyArrow schema for direct Arrow batch support."""
-        cols: List[tuple[str,pa.DataType]] = [
+        cols: List[tuple[str, pa.DataType]] = [
             ("symbol", pa.string()),
             ("time", pa.timestamp('us')),  # microsecond precision
             ("open", pa.float32()),
