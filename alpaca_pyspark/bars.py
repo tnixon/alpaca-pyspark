@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import pyarrow as pa
 import requests
-from pyspark.sql.datasource import DataSource, DataSourceReader
+from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.types import StructType
 
 from .common import build_page_fetcher, SymbolPartition
@@ -185,16 +185,8 @@ class HistoricalBarsReader(DataSourceReader):
             raise ValueError(f"Failed to parse bar data for symbol {sym}: {bar}. Error: {e}") from e
 
     def _create_record_batch(
-        self,
-        symbols: List[str],
-        times: List[dt],
-        opens: List[float],
-        highs: List[float],
-        lows: List[float],
-        closes: List[float],
-        volumes: List[int],
-        trade_counts: List[int],
-        vwaps: List[float]
+        self, symbols: List[str], times: List[dt], opens: List[float], highs: List[float], lows: List[float],
+        closes: List[float], volumes: List[int], trade_counts: List[int], vwaps: List[float]
     ) -> pa.RecordBatch:
         """Create a PyArrow RecordBatch from accumulated bar data.
 
@@ -222,9 +214,10 @@ class HistoricalBarsReader(DataSourceReader):
             pa.array(volumes, type=pa.int32()),
             pa.array(trade_counts, type=pa.int32()),
             pa.array(vwaps, type=pa.float32())
-        ], schema=self.pyarrow_type)
+        ],
+                                          schema=self.pyarrow_type)
 
-    def read(self, partition: SymbolPartition) -> Iterator[pa.RecordBatch]:
+    def read(self, partition: InputPartition) -> Iterator[pa.RecordBatch]:
         """Read historical bars data for a single symbol partition.
 
         Uses PyArrow batching for improved performance by yielding RecordBatch
@@ -260,8 +253,6 @@ class HistoricalBarsReader(DataSourceReader):
 
         # Configure session with timeout
         with requests.Session() as sess:
-            sess.timeout = (10.0, 30.0)  # (connect_timeout, read_timeout)
-
             # Tracking pages
             num_pages = 0
             next_page_token: Optional[str] = None
@@ -308,8 +299,7 @@ class HistoricalBarsReader(DataSourceReader):
                                 # Yield batch when reaching batch size
                                 if len(symbols) >= ARROW_BATCH_SIZE:
                                     yield self._create_record_batch(
-                                        symbols, times, opens, highs, lows,
-                                        closes, volumes, trade_counts, vwaps
+                                        symbols, times, opens, highs, lows, closes, volumes, trade_counts, vwaps
                                     )
                                     # Clear lists for next batch
                                     symbols = []
@@ -332,7 +322,5 @@ class HistoricalBarsReader(DataSourceReader):
             # Yield any remaining data as final batch
             if symbols:
                 yield self._create_record_batch(
-                    symbols, times, opens, highs, lows,
-                    closes, volumes, trade_counts, vwaps
+                    symbols, times, opens, highs, lows, closes, volumes, trade_counts, vwaps
                 )
-
