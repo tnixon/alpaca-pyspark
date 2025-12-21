@@ -230,8 +230,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         """Return PyArrow schema for this data type."""
         return to_arrow_schema(self.schema)
 
-    @abstractmethod
     @property
+    @abstractmethod
     def api_params(self) -> Dict[str, Any]:
         """Get API parameters for requests.
 
@@ -239,8 +239,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         """
         pass
 
-    @abstractmethod
     @property
+    @abstractmethod
     def data_key(self) -> str:
         """Get the key used to extract data from API response.
 
@@ -248,8 +248,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         """
         pass
 
-    @abstractmethod
     @property
+    @abstractmethod
     def path_elements(self) -> List[str]:
         """Get the URL path elements for the API endpoint.
 
