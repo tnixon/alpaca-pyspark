@@ -1,8 +1,7 @@
 import logging
 from datetime import datetime as dt
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
-import pyarrow as pa
 from pyspark.sql.types import StructType
 
 from .common import (
