@@ -59,6 +59,7 @@ class HistoricalBarsDataSource(BaseAlpacaDataSource):
 class HistoricalBarsReader(BaseAlpacaReader):
     """Reader implementation for historical bars data source."""
 
+    @property
     def api_params(self) -> Dict[str, Any]:
         """Get API parameters for bars requests."""
         return {
@@ -68,10 +69,12 @@ class HistoricalBarsReader(BaseAlpacaReader):
             "limit": int(self.options.get('limit', DEFAULT_LIMIT))
         }
 
+    @property
     def data_key(self) -> str:
         """Bars data is returned under the 'bars' key."""
         return "bars"
 
+    @property
     def path_elements(self) -> List[str]:
         """URL path for bars endpoint."""
         return ["stocks", "bars"]

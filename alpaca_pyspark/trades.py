@@ -53,6 +53,7 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
 class HistoricalTradesReader(BaseAlpacaReader):
     """Reader implementation for historical trades data source."""
 
+    @property
     def api_params(self) -> Dict[str, Any]:
         """Get API parameters for trades requests."""
         return {
@@ -61,10 +62,12 @@ class HistoricalTradesReader(BaseAlpacaReader):
             "limit": int(self.options.get('limit', DEFAULT_LIMIT))
         }
 
+    @property
     def data_key(self) -> str:
         """Trades data is returned under the 'trades' key."""
         return "trades"
 
+    @property
     def path_elements(self) -> List[str]:
         """URL path for trades endpoint."""
         return ["stocks", "trades"]

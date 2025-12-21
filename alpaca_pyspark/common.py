@@ -287,10 +287,10 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             raise ValueError(f"Expected SymbolPartition, got {type(partition)}")
 
         # Set up the page fetcher function
-        get_page = build_page_fetcher(self.endpoint, self.headers, self.path_elements())
+        get_page = build_page_fetcher(self.endpoint, self.headers, self.path_elements)
 
         # Get base params and set symbol
-        params = self.api_params()
+        params = self.api_params
         params['symbols'] = partition.symbol
 
         # Configure session
@@ -321,10 +321,9 @@ class BaseAlpacaReader(DataSourceReader, ABC):
                         sleep(RETRY_DELAY * retry_count)
 
                 # Process page as a single batch
-                data_key = self.data_key()
-                if data_key in pg and pg[data_key]:
+                if self.data_key in pg and pg[self.data_key]:
                     # Let subclass parse the page into a batch
-                    batch = self._parse_page_to_batch(pg[data_key], partition.symbol)
+                    batch = self._parse_page_to_batch(pg[self.data_key], partition.symbol)
                     if batch is not None:
                         yield batch
 
@@ -363,7 +362,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         if buffer_size > 0:
             # convert buffers to PyArrow Arrays
             parrays = [
-                pa.array(col_buffer[i], type=self.pyarrow_type[i])
+                pa.array(col_buffer[i], type=self.pyarrow_type.field(i).type)
                 for i in range(num_cols)
             ]
             # return as a batch
