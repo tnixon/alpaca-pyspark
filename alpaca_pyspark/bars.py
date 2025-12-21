@@ -59,7 +59,7 @@ class HistoricalBarsDataSource(BaseAlpacaDataSource):
 class HistoricalBarsReader(BaseAlpacaReader):
     """Reader implementation for historical bars data source."""
 
-    def _api_params(self) -> Dict[str, Any]:
+    def api_params(self) -> Dict[str, Any]:
         """Get API parameters for bars requests."""
         return {
             "timeframe": self.options['timeframe'],
@@ -68,22 +68,13 @@ class HistoricalBarsReader(BaseAlpacaReader):
             "limit": int(self.options.get('limit', DEFAULT_LIMIT))
         }
 
-    def _get_data_key(self) -> str:
+    def data_key(self) -> str:
         """Bars data is returned under the 'bars' key."""
         return "bars"
 
-    def _get_path_elements(self) -> List[str]:
+    def path_elements(self) -> List[str]:
         """URL path for bars endpoint."""
         return ["stocks", "bars"]
-
-    @property
-    def pyarrow_type(self) -> pa.Schema:
-        """Return PyArrow schema for bars data."""
-        cols: List[tuple[str, pa.DataType]] = [("symbol", pa.string()), ("time", pa.timestamp('us')),
-                                               ("open", pa.float32()), ("high", pa.float32()), ("low", pa.float32()),
-                                               ("close", pa.float32()), ("volume", pa.int32()),
-                                               ("trade_count", pa.int32()), ("vwap", pa.float32())]
-        return pa.schema(cols)
 
     def _parse_record(self, symbol: str, record: Dict[str, Any]) -> \
             Tuple[str, dt, float, float, float, float, int, int, float]:

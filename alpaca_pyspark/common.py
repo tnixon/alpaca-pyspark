@@ -3,14 +3,17 @@ import logging
 import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from functools import cached_property
 from time import sleep
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import pyarrow as pa
 import requests
+from requests import HTTPError, RequestException, Session
+
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.types import StructType
-from requests import HTTPError, RequestException, Session
+from pyspark.sql.pandas.types import to_arrow_schema
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +191,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         self.options = options
 
     @property
-    def _headers(self) -> Dict[str, str]:
+    def headers(self) -> Dict[str, str]:
         """Get HTTP headers for API requests."""
         return {
             'Content-Type': 'application/json',
@@ -222,14 +225,14 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             raise ValueError("No symbols provided for data fetching")
         return [SymbolPartition(sym) for sym in symbol_list]
 
-    @property
-    @abstractmethod
+    @cached_property
     def pyarrow_type(self) -> pa.Schema:
         """Return PyArrow schema for this data type."""
-        pass
+        return to_arrow_schema(self.schema)
 
     @abstractmethod
-    def _api_params(self) -> Dict[str, Any]:
+    @property
+    def api_params(self) -> Dict[str, Any]:
         """Get API parameters for requests.
 
         Subclasses should implement this to return data-source-specific parameters.
@@ -237,7 +240,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         pass
 
     @abstractmethod
-    def _get_data_key(self) -> str:
+    @property
+    def data_key(self) -> str:
         """Get the key used to extract data from API response.
 
         For example: 'bars' for bars data, 'trades' for trades data.
@@ -245,7 +249,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         pass
 
     @abstractmethod
-    def _get_path_elements(self) -> List[str]:
+    @property
+    def path_elements(self) -> List[str]:
         """Get the URL path elements for the API endpoint.
 
         For example: ['stocks', 'bars'] or ['stocks', 'trades']
@@ -294,10 +299,10 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             raise ValueError(f"Expected SymbolPartition, got {type(partition)}")
 
         # Set up the page fetcher function
-        get_page = build_page_fetcher(self.endpoint, self._headers, self._get_path_elements())
+        get_page = build_page_fetcher(self.endpoint, self.headers, self.path_elements())
 
         # Get base params and set symbol
-        params = self._api_params()
+        params = self.api_params()
         params['symbols'] = partition.symbol
 
         # Configure session
@@ -328,7 +333,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
                         sleep(RETRY_DELAY * retry_count)
 
                 # Process page as a single batch
-                data_key = self._get_data_key()
+                data_key = self.data_key()
                 if data_key in pg and pg[data_key]:
                     # Let subclass parse the page into a batch
                     batch = self._parse_page_to_batch(pg[data_key], partition.symbol)

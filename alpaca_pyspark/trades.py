@@ -53,7 +53,7 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
 class HistoricalTradesReader(BaseAlpacaReader):
     """Reader implementation for historical trades data source."""
 
-    def _api_params(self) -> Dict[str, Any]:
+    def api_params(self) -> Dict[str, Any]:
         """Get API parameters for trades requests."""
         return {
             "start": self.options['start'],
@@ -61,21 +61,13 @@ class HistoricalTradesReader(BaseAlpacaReader):
             "limit": int(self.options.get('limit', DEFAULT_LIMIT))
         }
 
-    def _get_data_key(self) -> str:
+    def data_key(self) -> str:
         """Trades data is returned under the 'trades' key."""
         return "trades"
 
-    def _get_path_elements(self) -> List[str]:
+    def path_elements(self) -> List[str]:
         """URL path for trades endpoint."""
         return ["stocks", "trades"]
-
-    @property
-    def pyarrow_type(self) -> pa.Schema:
-        """Return PyArrow schema for trades data."""
-        cols: List[tuple[str, pa.DataType]] = [("symbol", pa.string()), ("time", pa.timestamp('us')),
-                                               ("exchange", pa.string()), ("price", pa.float32()), ("size", pa.int32()),
-                                               ("conditions", pa.string()), ("id", pa.int64()), ("tape", pa.string())]
-        return pa.schema(cols)
 
     def _parse_record(self, symbol: str, record: Dict[str, Any]) -> \
             Tuple[str, dt, str, float, int, str, int, str]:
