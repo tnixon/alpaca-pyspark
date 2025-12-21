@@ -361,10 +361,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
         if buffer_size > 0:
             # convert buffers to PyArrow Arrays
-            parrays = [
-                pa.array(col_buffer[i], type=self.pyarrow_type.field(i).type)
-                for i in range(num_cols)
-            ]
+            parrays = [pa.array(col_buffer[i], type=self.pyarrow_type.field(i).type) for i in range(num_cols)]
             # return as a batch
             return pa.RecordBatch.from_arrays(parrays, schema=self.pyarrow_type)
         return None

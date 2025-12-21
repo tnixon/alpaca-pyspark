@@ -24,12 +24,18 @@ mypy = "^1.5.0"
 
 [tool.yapf]
 based_on_style = "google"
-column_limit = 120  # or whatever line length you prefer
+column_limit = 120
 indent_width = 4
-dedent_closing_brackets = true  # closing bracket at opening indent level
-coalesce_brackets = true  # avoid splitting brackets unnecessarily
-split_before_first_argument = false  # allows args on same line as opening paren
-split_before_logical_operator = true  # split before 'and'/'or' not after
+dedent_closing_brackets = true
+split_all_top_level_comma_separated_values = true
+split_before_logical_operator = true
+split_before_bitwise_operator = true
+split_before_arithmetic_operator = true
+split_before_named_assigns = true
+split_before_dict_set_generator = true
+split_before_expression_after_opening_paren = true  # Allow multi-line comprehensions
+split_complex_comprehension = true
+split_penalty_comprehension = 0
 
 [build-system]
 requires = ["poetry-core"]
