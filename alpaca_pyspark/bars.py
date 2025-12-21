@@ -92,59 +92,15 @@ class HistoricalBarsReader(BaseAlpacaReader):
         """
         try:
             return (
-                symbol, dt.fromisoformat(record["t"]), float(record["o"]), float(record["h"]), float(record["l"]),
-                float(record["c"]), int(record["v"]), int(record["n"]), float(record["vw"])
+                symbol,
+                dt.fromisoformat(record["t"]),
+                float(record["o"]),
+                float(record["h"]),
+                float(record["l"]),
+                float(record["c"]),
+                int(record["v"]),
+                int(record["n"]),
+                float(record["vw"])
             )
         except (KeyError, ValueError, TypeError) as e:
             raise ValueError(f"Failed to parse bar data for symbol {symbol}: {record}. Error: {e}") from e
-
-    def _create_record_batch(
-        self, symbols: List[str], times: List[dt], opens: List[float], highs: List[float], lows: List[float],
-        closes: List[float], volumes: List[int], trade_counts: List[int], vwaps: List[float]
-    ) -> pa.RecordBatch:
-        """Create a PyArrow RecordBatch from accumulated bar data."""
-        return pa.RecordBatch.from_arrays([
-            pa.array(symbols, type=pa.string()),
-            pa.array(times, type=pa.timestamp('us')),
-            pa.array(opens, type=pa.float32()),
-            pa.array(highs, type=pa.float32()),
-            pa.array(lows, type=pa.float32()),
-            pa.array(closes, type=pa.float32()),
-            pa.array(volumes, type=pa.int32()),
-            pa.array(trade_counts, type=pa.int32()),
-            pa.array(vwaps, type=pa.float32())
-        ],
-                                          schema=self.pyarrow_type)
-
-    def _parse_page_to_batch(self, data: Dict[str, List[Dict[str, Any]]], symbol: str) -> Optional[pa.RecordBatch]:
-        """Parse a page of bars data into a PyArrow RecordBatch."""
-        symbols: List[str] = []
-        times: List[dt] = []
-        opens: List[float] = []
-        highs: List[float] = []
-        lows: List[float] = []
-        closes: List[float] = []
-        volumes: List[int] = []
-        trade_counts: List[int] = []
-        vwaps: List[float] = []
-
-        for sym in data.keys():
-            for bar in data[sym]:
-                try:
-                    parsed = self._parse_record(sym, bar)
-                    symbols.append(parsed[0])
-                    times.append(parsed[1])
-                    opens.append(parsed[2])
-                    highs.append(parsed[3])
-                    lows.append(parsed[4])
-                    closes.append(parsed[5])
-                    volumes.append(parsed[6])
-                    trade_counts.append(parsed[7])
-                    vwaps.append(parsed[8])
-                except ValueError as e:
-                    logger.warning(f"Skipping malformed bar for {sym}: {e}")
-                    continue
-
-        if symbols:
-            return self._create_record_batch(symbols, times, opens, highs, lows, closes, volumes, trade_counts, vwaps)
-        return None

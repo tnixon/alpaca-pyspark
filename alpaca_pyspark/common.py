@@ -270,18 +270,6 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         """
         pass
 
-    @abstractmethod
-    def _create_record_batch(self, *args: Any) -> pa.RecordBatch:
-        """Create a PyArrow RecordBatch from accumulated record data.
-
-        Args:
-            *args: Lists of field values for the record batch
-
-        Returns:
-            PyArrow RecordBatch with the data
-        """
-        pass
-
     def read(self, partition: InputPartition) -> Iterator[pa.RecordBatch]:
         """Read data for a single symbol partition.
 
@@ -344,7 +332,6 @@ class BaseAlpacaReader(DataSourceReader, ABC):
                 num_pages += 1
                 next_page_token = pg.get("next_page_token", None)
 
-    @abstractmethod
     def _parse_page_to_batch(self, data: Dict[str, List[Dict[str, Any]]], symbol: str) -> Optional[pa.RecordBatch]:
         """Parse a page of data into a PyArrow RecordBatch.
 
@@ -355,4 +342,30 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         Returns:
             PyArrow RecordBatch or None if no valid data
         """
-        pass
+        # initialize an in-memory buffer for each column
+        num_cols = len(self.pyarrow_type)
+        buffer_size = 0
+        col_buffer: List[List[Any]] = [[] for _ in range(num_cols)]
+
+        # results come as lists of records per symbol
+        for sym in data.keys():
+            for record in data[sym]:
+                try:
+                    # parse the record and append it to the column buffer
+                    parsed = self._parse_record(sym, record)
+                    for i in range(num_cols):
+                        col_buffer[i].append(parsed[i])
+                    buffer_size += 1
+                except ValueError as e:
+                    logger.warning(f"Skipping malformed record for {sym}: {e}")
+                    continue
+
+        if buffer_size > 0:
+            # convert buffers to PyArrow Arrays
+            parrays = [
+                pa.array(col_buffer[i], type=self.pyarrow_type[i])
+                for i in range(num_cols)
+            ]
+            # return as a batch
+            return pa.RecordBatch.from_arrays(parrays, schema=self.pyarrow_type)
+        return None

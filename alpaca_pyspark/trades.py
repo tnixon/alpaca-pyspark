@@ -87,56 +87,15 @@ class HistoricalTradesReader(BaseAlpacaReader):
             # Conditions is a list of strings, join them
             conditions = ','.join(record.get("c", []))
             return (
-                symbol, dt.fromisoformat(record["t"]), record["x"], float(record["p"]), int(record["s"]), conditions,
-                int(record["i"]), record["z"]
+                symbol,
+                dt.fromisoformat(record["t"]),
+                record["x"],
+                float(record["p"]),
+                int(record["s"]),
+                conditions,
+                int(record["i"]),
+                record["z"]
             )
         except (KeyError, ValueError, TypeError) as e:
             raise ValueError(f"Failed to parse trade data for symbol {symbol}: {record}. Error: {e}") from e
 
-    def _create_record_batch(
-        self, symbols: List[str], times: List[dt], exchanges: List[str], prices: List[float], sizes: List[int],
-        conditions: List[str], ids: List[int], tapes: List[str]
-    ) -> pa.RecordBatch:
-        """Create a PyArrow RecordBatch from accumulated trade data."""
-        return pa.RecordBatch.from_arrays([
-            pa.array(symbols, type=pa.string()),
-            pa.array(times, type=pa.timestamp('us')),
-            pa.array(exchanges, type=pa.string()),
-            pa.array(prices, type=pa.float32()),
-            pa.array(sizes, type=pa.int32()),
-            pa.array(conditions, type=pa.string()),
-            pa.array(ids, type=pa.int64()),
-            pa.array(tapes, type=pa.string())
-        ],
-                                          schema=self.pyarrow_type)
-
-    def _parse_page_to_batch(self, data: Dict[str, List[Dict[str, Any]]], symbol: str) -> Optional[pa.RecordBatch]:
-        """Parse a page of trades data into a PyArrow RecordBatch."""
-        symbols: List[str] = []
-        times: List[dt] = []
-        exchanges: List[str] = []
-        prices: List[float] = []
-        sizes: List[int] = []
-        conditions: List[str] = []
-        ids: List[int] = []
-        tapes: List[str] = []
-
-        for sym in data.keys():
-            for trade in data[sym]:
-                try:
-                    parsed = self._parse_record(sym, trade)
-                    symbols.append(parsed[0])
-                    times.append(parsed[1])
-                    exchanges.append(parsed[2])
-                    prices.append(parsed[3])
-                    sizes.append(parsed[4])
-                    conditions.append(parsed[5])
-                    ids.append(parsed[6])
-                    tapes.append(parsed[7])
-                except ValueError as e:
-                    logger.warning(f"Skipping malformed trade for {sym}: {e}")
-                    continue
-
-        if symbols:
-            return self._create_record_batch(symbols, times, exchanges, prices, sizes, conditions, ids, tapes)
-        return None
