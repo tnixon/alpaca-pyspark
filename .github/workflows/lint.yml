@@ -13,7 +13,8 @@ on:
       - main
 
 jobs:
-  lint:
+  yapf:
+    name: YAPF Format Check
     runs-on: ubuntu-latest
 
     steps:
@@ -46,7 +47,7 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
 
-      - name: Run YAPF (check formatting)
+      - name: Run YAPF
         run: |
           poetry run yapf --diff --recursive alpaca_pyspark/
           if [ $? -ne 0 ]; then
@@ -54,8 +55,76 @@ jobs:
             exit 1
           fi
 
+  flake8:
+    name: Flake8 Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: Install project
+        run: poetry install --no-interaction
+
       - name: Run Flake8
         run: poetry run flake8 alpaca_pyspark/
+
+  mypy:
+    name: MyPy Type Checking
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: Install project
+        run: poetry install --no-interaction
 
       - name: Run MyPy
         run: poetry run mypy alpaca_pyspark/
