@@ -3,17 +3,14 @@ import logging
 import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from functools import cached_property
 from time import sleep
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import pyarrow as pa
 import requests
-from requests import HTTPError, RequestException, Session
-
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.types import StructType
-from pyspark.sql.pandas.types import to_arrow_schema
+from requests import HTTPError, RequestException, Session
 
 logger = logging.getLogger(__name__)
 
@@ -172,9 +169,10 @@ class BaseAlpacaDataSource(DataSource, ABC):
         """
         pass
 
+    @property
     @abstractmethod
-    def reader(self, schema: StructType) -> "DataSourceReader":
-        """Create and return a reader instance for this data source."""
+    def pa_schema(self) -> pa.Schema:
+        """Return PyArrow schema for this data type."""
         pass
 
 
@@ -185,9 +183,9 @@ class BaseAlpacaReader(DataSourceReader, ABC):
     PyArrow batching support.
     """
 
-    def __init__(self, schema: StructType, options: Dict[str, str]) -> None:
+    def __init__(self, pa_schema: pa.Schema, options: Dict[str, str]) -> None:
         super().__init__()
-        self.schema = schema
+        self.pa_schema = pa_schema
         self.options = options
 
     @property
@@ -224,11 +222,6 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         if not symbol_list:
             raise ValueError("No symbols provided for data fetching")
         return [SymbolPartition(sym) for sym in symbol_list]
-
-    @cached_property
-    def pyarrow_type(self) -> pa.Schema:
-        """Return PyArrow schema for this data type."""
-        return to_arrow_schema(self.schema)
 
     @property
     @abstractmethod
@@ -342,7 +335,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             PyArrow RecordBatch or None if no valid data
         """
         # initialize an in-memory buffer for each column
-        num_cols = len(self.pyarrow_type)
+        num_cols = len(self.pa_schema)
         buffer_size = 0
         col_buffer: List[List[Any]] = [[] for _ in range(num_cols)]
 
@@ -361,7 +354,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
         if buffer_size > 0:
             # convert buffers to PyArrow Arrays
-            parrays = [pa.array(col_buffer[i], type=self.pyarrow_type.field(i).type) for i in range(num_cols)]
+            parrays = [pa.array(col_buffer[i], type=self.pa_schema.field(i).type) for i in range(num_cols)]
             # return as a batch
-            return pa.RecordBatch.from_arrays(parrays, schema=self.pyarrow_type)
+            return pa.RecordBatch.from_arrays(parrays, schema=self.pa_schema)
         return None

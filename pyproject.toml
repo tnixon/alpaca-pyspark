@@ -13,8 +13,8 @@ pandas = "^2.0.0"
 requests = "^2.31.0"
 types-requests = "^2.31.0"
 pyspark = "^4.0.0"
-pyarrow = "^20.0.0"
-pyarrow-stubs = "^20.0.0"
+pyarrow = "^19.0.1"
+pyarrow-stubs = "^19.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
