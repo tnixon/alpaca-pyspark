@@ -26,6 +26,7 @@ Symbols_Option_Type = Union[str, List[str], Tuple[str, ...]]
 @dataclass
 class SymbolPartition(InputPartition):
     """Partition representing a single stock symbol for parallel processing."""
+
     symbol: str
 
 
@@ -94,7 +95,7 @@ def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: Li
 
         # Append page token if it exists
         if page_token:
-            request_params['page_token'] = page_token
+            request_params["page_token"] = page_token
 
         try:
             url = build_url(endpoint, path_elements, request_params)
@@ -124,7 +125,7 @@ class BaseAlpacaDataSource(DataSource, ABC):
     def _validate_options(self) -> None:
         """Validate that all required options are present and valid."""
         # Check common required options
-        common_required = ['symbols', 'APCA-API-KEY-ID', 'APCA-API-SECRET-KEY', 'start', 'end']
+        common_required = ["symbols", "APCA-API-KEY-ID", "APCA-API-SECRET-KEY", "start", "end"]
         # Allow subclasses to add additional required options
         required_options = common_required + self._additional_required_options()
 
@@ -133,7 +134,7 @@ class BaseAlpacaDataSource(DataSource, ABC):
             raise ValueError(f"Missing required options: {missing}")
 
         # Validate symbols format
-        symbols: Symbols_Option_Type = self.options.get('symbols', [])
+        symbols: Symbols_Option_Type = self.options.get("symbols", [])
         if isinstance(symbols, str):
             try:
                 parsed_symbols = ast.literal_eval(symbols)
@@ -141,15 +142,13 @@ class BaseAlpacaDataSource(DataSource, ABC):
                     raise ValueError("Symbols must be a non-empty list or tuple")
             except (ValueError, SyntaxError) as e:
                 raise ValueError(
-                    f"Invalid symbols format '{symbols}'. "
-                    f"Must be a valid Python list/tuple string."
+                    f"Invalid symbols format '{symbols}'. " f"Must be a valid Python list/tuple string."
                 ) from e
         elif isinstance(symbols, (list, tuple)):
             if not symbols:
                 raise ValueError("Symbols list cannot be empty")
         else:
-            raise ValueError(f"Symbols must be a list, tuple, "
-                             f"or string representation, got {type(symbols)}")
+            raise ValueError(f"Symbols must be a list, tuple, " f"or string representation, got {type(symbols)}")
 
         # Allow subclasses to perform additional validation
         self._validate_additional_options()
@@ -191,9 +190,9 @@ class BaseAlpacaReader(DataSourceReader, ABC):
     def headers(self) -> Dict[str, str]:
         """Get HTTP headers for API requests."""
         return {
-            'Content-Type': 'application/json',
-            'APCA-API-KEY-ID': self.options['APCA-API-KEY-ID'],
-            'APCA-API-SECRET-KEY': self.options['APCA-API-SECRET-KEY']
+            "Content-Type": "application/json",
+            "APCA-API-KEY-ID": self.options["APCA-API-KEY-ID"],
+            "APCA-API-SECRET-KEY": self.options["APCA-API-SECRET-KEY"],
         }
 
     @property
@@ -283,7 +282,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
         # Get base params and set symbol
         params = self.api_params
-        params['symbols'] = partition.symbol
+        params["symbols"] = partition.symbol
 
         # Configure session
         with requests.Session() as sess:

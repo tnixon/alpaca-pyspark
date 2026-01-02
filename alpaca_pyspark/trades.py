@@ -14,6 +14,9 @@ from .common import (
 # Set up logger
 logger = logging.getLogger(__name__)
 
+# Type alias for trade data tuple: symbol, time, exchange, price, size, conditions, id, tape
+TradeTuple = Tuple[str, dt, str, float, int, str, int, str]
+
 
 class HistoricalTradesDataSource(BaseAlpacaDataSource):
     """PySpark DataSource for Alpaca's historical trades data.
@@ -48,7 +51,7 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
 
     @property
     def pa_schema(self) -> pa.Schema:
-        fields : Iterable[tuple[str, pa.DataType]] = [
+        fields: Iterable[tuple[str, pa.DataType]] = [
             ("symbol", pa.string()),
             ("time", pa.timestamp("us", tz="UTC")),
             ("exchange", pa.string()),
@@ -56,7 +59,7 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
             ("size", pa.int32()),
             ("conditions", pa.string()),
             ("id", pa.int64()),
-            ("tape", pa.string())
+            ("tape", pa.string()),
         ]
         return pa.schema(fields)
 
@@ -71,9 +74,9 @@ class HistoricalTradesReader(BaseAlpacaReader):
     def api_params(self) -> Dict[str, Any]:
         """Get API parameters for trades requests."""
         return {
-            "start": self.options['start'],
-            "end": self.options['end'],
-            "limit": int(self.options.get('limit', DEFAULT_LIMIT))
+            "start": self.options["start"],
+            "end": self.options["end"],
+            "limit": int(self.options.get("limit", DEFAULT_LIMIT)),
         }
 
     @property
@@ -86,8 +89,7 @@ class HistoricalTradesReader(BaseAlpacaReader):
         """URL path for trades endpoint."""
         return ["stocks", "trades"]
 
-    def _parse_record(self, symbol: str, record: Dict[str, Any]) -> \
-            Tuple[str, dt, str, float, int, str, int, str]:
+    def _parse_record(self, symbol: str, record: Dict[str, Any]) -> TradeTuple:
         """Parse a single trade from API response into tuple format.
 
         Args:
@@ -95,14 +97,14 @@ class HistoricalTradesReader(BaseAlpacaReader):
             record: Trade data dictionary from API response
 
         Returns:
-            Tuple containing parsed trade data
+            Tuple containing parsed trade data (symbol, time, exchange, price, size, conditions, id, tape)
 
         Raises:
             ValueError: If trade data is malformed or missing required fields
         """
         try:
             # Conditions is a list of strings, join them
-            conditions = ','.join(record.get("c", []))
+            conditions = ",".join(record.get("c", []))
             return (
                 symbol,
                 dt.fromisoformat(record["t"]),
@@ -111,7 +113,7 @@ class HistoricalTradesReader(BaseAlpacaReader):
                 int(record["s"]),
                 conditions,
                 int(record["i"]),
-                record["z"]
+                record["z"],
             )
         except (KeyError, ValueError, TypeError) as e:
             raise ValueError(f"Failed to parse trade data for symbol {symbol}: {record}. Error: {e}") from e

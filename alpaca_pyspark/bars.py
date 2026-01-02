@@ -14,6 +14,9 @@ from .common import (
 # Set up logger
 logger = logging.getLogger(__name__)
 
+# Type alias for bar data tuple: symbol, time, open, high, low, close, volume, trade_count, vwap
+BarTuple = Tuple[str, dt, float, float, float, float, int, int, float]
+
 
 class HistoricalBarsDataSource(BaseAlpacaDataSource):
     """PySpark DataSource for Alpaca's historical bars data.
@@ -33,7 +36,7 @@ class HistoricalBarsDataSource(BaseAlpacaDataSource):
 
     def _additional_required_options(self) -> List[str]:
         """Bars require the 'timeframe' option."""
-        return ['timeframe']
+        return ["timeframe"]
 
     @classmethod
     def name(cls) -> str:
@@ -63,7 +66,7 @@ class HistoricalBarsDataSource(BaseAlpacaDataSource):
             ("close", pa.float32()),
             ("volume", pa.int32()),
             ("trade_count", pa.int32()),
-            ("vwap", pa.float32())
+            ("vwap", pa.float32()),
         ]
         return pa.schema(fields)
 
@@ -78,10 +81,10 @@ class HistoricalBarsReader(BaseAlpacaReader):
     def api_params(self) -> Dict[str, Any]:
         """Get API parameters for bars requests."""
         return {
-            "timeframe": self.options['timeframe'],
-            "start": self.options['start'],
-            "end": self.options['end'],
-            "limit": int(self.options.get('limit', DEFAULT_LIMIT))
+            "timeframe": self.options["timeframe"],
+            "start": self.options["start"],
+            "end": self.options["end"],
+            "limit": int(self.options.get("limit", DEFAULT_LIMIT)),
         }
 
     @property
@@ -94,8 +97,7 @@ class HistoricalBarsReader(BaseAlpacaReader):
         """URL path for bars endpoint."""
         return ["stocks", "bars"]
 
-    def _parse_record(self, symbol: str, record: Dict[str, Any]) -> \
-            Tuple[str, dt, float, float, float, float, int, int, float]:
+    def _parse_record(self, symbol: str, record: Dict[str, Any]) -> BarTuple:
         """Parse a single bar from API response into tuple format.
 
         Args:
@@ -103,7 +105,7 @@ class HistoricalBarsReader(BaseAlpacaReader):
             record: Bar data dictionary from API response
 
         Returns:
-            Tuple containing parsed bar data
+            Tuple containing parsed bar data (symbol, time, open, high, low, close, volume, trade_count, vwap)
 
         Raises:
             ValueError: If bar data is malformed or missing required fields
@@ -118,7 +120,7 @@ class HistoricalBarsReader(BaseAlpacaReader):
                 float(record["c"]),
                 int(record["v"]),
                 int(record["n"]),
-                float(record["vw"])
+                float(record["vw"]),
             )
         except (KeyError, ValueError, TypeError) as e:
             raise ValueError(f"Failed to parse bar data for symbol {symbol}: {record}. Error: {e}") from e
