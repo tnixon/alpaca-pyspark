@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime as dt
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union, Iterable
 
 import pyarrow as pa
 from pyspark.sql.types import StructType
@@ -48,7 +48,7 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
 
     @property
     def pa_schema(self) -> pa.Schema:
-        return pa.schema([
+        fields : Iterable[tuple[str, pa.DataType]] = [
             ("symbol", pa.string()),
             ("time", pa.timestamp("us", tz="UTC")),
             ("exchange", pa.string()),
@@ -57,7 +57,8 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
             ("conditions", pa.string()),
             ("id", pa.int64()),
             ("tape", pa.string())
-        ])
+        ]
+        return pa.schema(fields)
 
     def reader(self, schema: StructType) -> "HistoricalTradesReader":
         return HistoricalTradesReader(self.pa_schema, self.options)

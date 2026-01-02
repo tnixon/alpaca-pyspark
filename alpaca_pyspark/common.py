@@ -9,7 +9,6 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 import pyarrow as pa
 import requests
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
-from pyspark.sql.types import StructType
 from requests import HTTPError, RequestException, Session
 
 logger = logging.getLogger(__name__)
