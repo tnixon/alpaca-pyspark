@@ -74,7 +74,7 @@ spark.sql("SELECT symbol, time, close FROM bars WHERE symbol = 'AAPL'").show()
 #### Optional Options
 
 - **endpoint**: API endpoint URL (defaults to Alpaca's production endpoint)
-- **limit**: Maximum bars per API request (default: 1000)
+- **limit**: Maximum bars per API request (default: 10000)
 
 ### Schema
 
@@ -128,19 +128,25 @@ The project is organized as follows:
 alpaca-pyspark/
 ├── alpaca_pyspark/          # Main package directory
 │   ├── bars.py              # Historical bars data source implementation
-│   ├── common.py            # Shared utilities and partitioning logic
+│   ├── trades.py            # Historical trades data source implementation
+│   ├── common.py            # Shared base classes, utilities, and partitioning logic
 │   └── __init__.py          # Package exports
+├── .github/
+│   └── workflows/
+│       └── lint.yml         # CI/CD workflow for code quality checks
 ├── pyproject.toml           # Poetry configuration and dependencies
 ├── README.md                # This file
+├── CLAUDE.md                # Development guidelines for AI assistants
 └── Test Historical Bars DS.ipynb  # Example notebook
 ```
 
 ### Key Components
 
-- **DataSource Classes**: Define schema and validate options for each data type
-- **DataSourceReader Classes**: Implement the data fetching logic with PyArrow batch support
-- **Partition Classes**: Enable parallel processing by distributing work across symbols
-- **Utility Functions**: Common functionality for URL building and API requests
+- **DataSource Classes** (`bars.py`, `trades.py`): Define schema and validate options for each data type
+- **DataSourceReader Classes** (`bars.py`, `trades.py`): Implement the data fetching logic with PyArrow batch support
+- **Base Classes** (`common.py`): Abstract base classes providing common functionality for all data sources
+- **Partition Classes** (`common.py`): Enable parallel processing by distributing work across symbols
+- **Utility Functions** (`common.py`): Common functionality for URL building and API requests
 
 ## Development
 
@@ -158,18 +164,18 @@ This creates distribution packages in the `dist/` directory.
 
 The project uses several tools to maintain code quality. Run these checks before committing:
 
-#### Code Formatting with YAPF
+#### Code Formatting with Ruff
 
 Format all Python files:
 
 ```bash
-poetry run yapf -ir alpaca_pyspark/
+poetry run ruff format alpaca_pyspark/
 ```
 
 Check formatting without making changes:
 
 ```bash
-poetry run yapf --diff --recursive alpaca_pyspark/
+poetry run ruff format --check alpaca_pyspark/
 ```
 
 #### Linting with Flake8
@@ -193,7 +199,7 @@ poetry run mypy alpaca_pyspark/
 Run all quality checks at once:
 
 ```bash
-poetry run yapf --diff --recursive alpaca_pyspark/ && \
+poetry run ruff format --check alpaca_pyspark/ && \
 poetry run flake8 alpaca_pyspark/ && \
 poetry run mypy alpaca_pyspark/
 ```
@@ -220,9 +226,10 @@ The library partitions data requests by stock symbol, allowing Spark to:
 
 The data sources use PyArrow RecordBatch objects for efficient data transfer between the API and Spark. This approach:
 
-- Batches rows into groups (default: 10,000 rows per batch)
+- Batches API pages into Arrow RecordBatch objects (default: up to 10,000 rows per API page)
 - Reduces I/O overhead compared to row-by-row processing
 - Provides significant performance improvements for large datasets
+- Leverages Arrow's zero-copy capabilities for fast data transfer
 
 ### Error Handling
 
