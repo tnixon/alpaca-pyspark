@@ -37,8 +37,9 @@ This project implements PySpark DataSource connectors for the Alpaca Markets API
 3. **Resilient API Calls**: Built-in retry logic with exponential backoff
 
 ### Key Components
-- **DataSource Classes** (`bars.py`): Define schema and validate options
-- **DataSourceReader Classes** (`bars.py`): Implement data fetching with PyArrow batch support
+- **DataSource Classes** (`bars.py`, `trades.py`): Define schema and validate options
+- **DataSourceReader Classes** (`bars.py`, `trades.py`): Implement data fetching with PyArrow batch support
+- **Base Classes** (`common.py`): Abstract base classes (`BaseAlpacaDataSource`, `BaseAlpacaReader`) providing common functionality
 - **Partition Classes** (`common.py`): Enable parallel processing by distributing work
 - **Utility Functions** (`common.py`): Shared functionality for URL building and API requests
 
@@ -51,8 +52,8 @@ This project implements PySpark DataSource connectors for the Alpaca Markets API
 
 #### Dependencies
 Dependencies are managed via Poetry and defined in `pyproject.toml`:
-- Runtime: Python 3.11+, PySpark 4.0+, pandas, requests
-- Development: pytest, black, flake8, mypy
+- Runtime: Python 3.11+, PySpark 4.0+, pandas, requests, pyarrow
+- Development: pytest, ruff, flake8, mypy
 
 ## Development Guidelines
 
@@ -89,10 +90,11 @@ Follow existing patterns in the codebase:
 - Document secure credential handling in examples
 
 ### Code Style
-- Follow existing code formatting (black, flake8)
+- Follow existing code formatting (ruff format, flake8)
 - Use type hints consistently (mypy)
 - Maintain existing naming conventions
 - Keep docstrings updated when modifying functions
+- Use type aliases for complex type hints to improve readability
 
 ## Working with PySpark DataSource API
 
@@ -105,13 +107,14 @@ When modifying data source implementations:
 ## Common Tasks
 
 ### Adding New Data Source Types
-If implementing additional Alpaca data types (trades, quotes, etc.):
-1. Follow the pattern established in `bars.py`
-2. Define schema matching Alpaca API response
-3. Implement partitioning for parallel execution
-4. Use PyArrow batching for performance
-5. Include retry logic and error handling
-6. Register the data source in `__init__.py`
+If implementing additional Alpaca data types (quotes, etc.):
+1. Extend `BaseAlpacaDataSource` and `BaseAlpacaReader` from `common.py`
+2. Follow the pattern established in `bars.py` or `trades.py`
+3. Define schema matching Alpaca API response
+4. Implement required abstract methods (`api_params`, `data_key`, `path_elements`, `_parse_record`)
+5. Use type aliases for complex return types (e.g., `BarTuple`, `TradeTuple`)
+6. PyArrow batching and partitioning are handled by base classes
+7. Register the data source in `__init__.py`
 
 ### Modifying API Requests
 When changing how API requests are made:
@@ -134,10 +137,29 @@ Development environment setup is covered in README.md. Key points:
 - Use `poetry shell` to activate the virtual environment
 - Use `poetry build` to create distribution packages
 
+## Code Quality Tools
+
+The project uses three tools for code quality:
+
+1. **Ruff** - Code formatting (replaces Black/YAPF)
+   - Run: `poetry run ruff format alpaca_pyspark/`
+   - Check: `poetry run ruff format --check alpaca_pyspark/`
+   - Configuration in `pyproject.toml` under `[tool.ruff]`
+
+2. **Flake8** - Linting for code style issues
+   - Run: `poetry run flake8 alpaca_pyspark/`
+   - Configuration in `.flake8` file
+
+3. **MyPy** - Static type checking
+   - Run: `poetry run mypy alpaca_pyspark/`
+   - Configuration in `pyproject.toml` under `[tool.mypy]`
+
+All three run independently in CI/CD (see `.github/workflows/lint.yml`)
+
 ## Questions or Clarifications
 
 When implementation details are unclear:
-- Check existing patterns in `bars.py` and `common.py`
+- Check existing patterns in `bars.py`, `trades.py`, and `common.py`
 - Consult linked documentation (Alpaca API, PySpark DataSource API, PyArrow)
 - Ask the user for clarification rather than making assumptions
 - Consider whether the change fits within the current task scope

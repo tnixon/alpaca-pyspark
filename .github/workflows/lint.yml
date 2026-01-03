@@ -13,8 +13,8 @@ on:
       - main
 
 jobs:
-  yapf:
-    name: YAPF Format Check
+  ruff-format:
+    name: Ruff Format Check
     runs-on: ubuntu-latest
 
     steps:
@@ -47,11 +47,11 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
 
-      - name: Run YAPF
+      - name: Run Ruff Format Check
         run: |
-          poetry run yapf --diff --recursive alpaca_pyspark/
+          poetry run ruff format --check alpaca_pyspark/
           if [ $? -ne 0 ]; then
-            echo "❌ Code formatting issues found. Run 'poetry run yapf -ir alpaca_pyspark/' to fix."
+            echo "❌ Code formatting issues found. Run 'poetry run ruff format alpaca_pyspark/' to fix."
             exit 1
           fi
 

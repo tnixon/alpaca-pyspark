@@ -13,23 +13,24 @@ pandas = "^2.0.0"
 requests = "^2.31.0"
 types-requests = "^2.31.0"
 pyspark = "^4.0.0"
-pyarrow = "^20.0.0"
-pyarrow-stubs = "^20.0.0"
+pyarrow = "^19.0.1"
+pyarrow-stubs = "^19.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
-yapf = "^0.40.0"
+ruff = "^0.8.0"
 flake8 = "^6.0.0"
 mypy = "^1.5.0"
 
-[tool.yapf]
-based_on_style = "google"
-column_limit = 120  # or whatever line length you prefer
-indent_width = 4
-dedent_closing_brackets = true  # closing bracket at opening indent level
-coalesce_brackets = true  # avoid splitting brackets unnecessarily
-split_before_first_argument = false  # allows args on same line as opening paren
-split_before_logical_operator = true  # split before 'and'/'or' not after
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 [build-system]
 requires = ["poetry-core"]
