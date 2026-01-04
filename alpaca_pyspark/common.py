@@ -1,5 +1,6 @@
 import ast
 import logging
+import time
 import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -146,14 +147,18 @@ def retriable_session(num_retries: int = MAX_RETRIES) -> Session:
 
 
 def fetch_all_pages(
-    page_fetcher_fn: Page_Fetcher_SigType, params: Dict[str, Any], num_retries: int = MAX_RETRIES
+    page_fetcher_fn: Page_Fetcher_SigType,
+    params: Dict[str, Any],
+    num_retries: int = MAX_RETRIES,
+    rate_limit_delay: float = 0.0,
 ) -> Iterator[Dict[str, Any]]:
-    """Fetch all pages of data from the API with retry logic.
+    """Fetch all pages of data from the API with retry logic and optional rate limiting.
 
     Args:
         page_fetcher_fn: Function to fetch a single page of data
         params: Base query parameters for API requests
         num_retries: Maximum number of retry attempts (default: MAX_RETRIES)
+        rate_limit_delay: Seconds to sleep between page fetches (default: 0.0, disabled)
 
     Yields:
         Dict[str, Any]: JSON response from each API page
@@ -177,6 +182,10 @@ def fetch_all_pages(
             # Go to next page
             num_pages += 1
             next_page_token = pg.get("next_page_token", None)
+
+            # Apply rate limiting if configured and there are more pages
+            if rate_limit_delay > 0 and next_page_token:
+                time.sleep(rate_limit_delay)
 
 
 class BaseAlpacaDataSource(DataSource, ABC):
@@ -380,8 +389,11 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         # Get base params and set symbol
         params = self.api_params(partition)
 
+        # Get rate limit delay from options (default: 0.0, disabled)
+        rate_limit_delay = float(self.options.get("rate_limit_delay", 0.0))
+
         # process all pages of results
-        for pg in fetch_all_pages(get_page, params):
+        for pg in fetch_all_pages(get_page, params, rate_limit_delay=rate_limit_delay):
             # Process page as a single batch
             if self.data_key in pg and pg[self.data_key]:
                 # Let subclass parse the page into a batch
