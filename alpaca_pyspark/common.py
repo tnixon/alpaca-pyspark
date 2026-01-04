@@ -3,13 +3,14 @@ import logging
 import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from time import sleep
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union, Callable
 
 import pyarrow as pa
 import requests
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from requests import HTTPError, RequestException, Session
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,33 @@ def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: Li
     return get_page
 
 
+def retriable_session(num_retries: int = MAX_RETRIES) -> Session:
+    """
+    Creates a session configured to automatically retry failed requests.
+
+    Args:
+        num_retries: the maximum number of retry attempts (default: MAX_RETRIES)
+
+    Returns: a session configured to automatically retry failed requests
+    """
+    session = requests.Session()
+
+    # Define the retry strategy
+    retry_strategy = Retry(
+        total=5,  # Total number of retries
+        backoff_factor=1,  # Wait [0.5s, 1s, 2s, 4s, 8s...] between retries
+        status_forcelist=[429, 500, 502, 503, 504],  # Retry on these HTTP codes
+        allowed_methods=["HEAD", "GET", "OPTIONS"]  # Only retry safe/idempotent methods
+    )
+
+    # Create the adapter and mount it to the session
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
+    return session
+
+
 def fetch_all_pages(
     page_fetcher_fn: Page_Fetcher_SigType, params: Dict[str, Any], num_retries: int = MAX_RETRIES
 ) -> Iterator[Dict[str, Any]]:
@@ -132,27 +160,14 @@ def fetch_all_pages(
         ValueError: If all retry attempts fail
     """
     # Configure session
-    with requests.Session() as sess:
+    with retriable_session(num_retries) as sess:
         num_pages = 0
         next_page_token: Optional[str] = None
 
         # Cycle through pages
         while next_page_token or num_pages < 1:
-            retry_count = 0
-
-            # Retry loop
-            while retry_count < num_retries:
-                try:
-                    pg = page_fetcher_fn(sess, params, next_page_token)
-                    break  # Success, exit retry loop
-                except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
-                    retry_count += 1
-                    # fail after
-                    if retry_count >= num_retries:
-                        raise ValueError(f"API request failed after {num_retries} retries") from e
-
-                    # increase delay on each retry
-                    sleep(RETRY_DELAY * retry_count)
+            # fetch the next page of results
+            pg = page_fetcher_fn(sess, params, next_page_token)
 
             # yield up the page of results
             yield pg
@@ -339,16 +354,15 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             # Process page as a single batch
             if self.data_key in pg and pg[self.data_key]:
                 # Let subclass parse the page into a batch
-                batch = self._parse_page_to_batch(pg[self.data_key], partition.symbol)
+                batch = self._parse_page_to_batch(pg[self.data_key])
                 if batch is not None:
                     yield batch
 
-    def _parse_page_to_batch(self, data: Dict[str, List[Dict[str, Any]]], symbol: str) -> Optional[pa.RecordBatch]:
+    def _parse_page_to_batch(self, data: Dict[str, List[Dict[str, Any]]]) -> Optional[pa.RecordBatch]:
         """Parse a page of data into a PyArrow RecordBatch.
 
         Args:
             data: Dictionary mapping symbols to lists of records
-            symbol: The symbol being processed
 
         Returns:
             PyArrow RecordBatch or None if no valid data
