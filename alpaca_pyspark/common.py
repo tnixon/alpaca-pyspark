@@ -217,6 +217,24 @@ class BaseAlpacaDataSource(DataSource, ABC):
         else:
             raise ValueError(f"Symbols must be a list, tuple, " f"or string representation, got {type(symbols)}")
 
+        # Validate start and end datetime formats
+        start_str = self.options.get("start", "")
+        end_str = self.options.get("end", "")
+
+        try:
+            start_t = dt.datetime.fromisoformat(start_str)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid 'start' option: '{start_str}' is not a valid ISO format datetime") from e
+
+        try:
+            end_t = dt.datetime.fromisoformat(end_str)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid 'end' option: '{end_str}' is not a valid ISO format datetime") from e
+
+        # make sure that start is before end
+        if start_t > end_t:
+            raise ValueError(f"start time is after end time: {start_t} > {end_t}")
+
         # Allow subclasses to perform additional validation
         self._validate_additional_options()
 
