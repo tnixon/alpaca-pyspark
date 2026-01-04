@@ -4,6 +4,7 @@ import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union, Callable
+import datetime as dt
 
 import pyarrow as pa
 import requests
@@ -28,10 +29,11 @@ Page_Fetcher_SigType = Callable[[Session, Dict[str, Any], Optional[str]], Dict[s
 
 
 @dataclass
-class SymbolPartition(InputPartition):
-    """Partition representing a single stock symbol for parallel processing."""
+class SymbolDatePartition(InputPartition):
+    """Partition representing a single stock symbol on a single date for parallel processing."""
 
     symbol: str
+    date: dt.date
 
 
 def build_url(endpoint: str, path_elements: List[str], params: Dict[str, Any]) -> str:
@@ -279,21 +281,33 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             # Already a list/tuple (already validated in DataSource)
             return list(symbols)
 
-    def partitions(self) -> Sequence[SymbolPartition]:
+    def partitions(self) -> Sequence[SymbolDatePartition]:
         """Create partitions for parallel processing, one per symbol."""
         symbol_list = self.symbols
         if not symbol_list:
             raise ValueError("No symbols provided for data fetching")
-        return [SymbolPartition(sym) for sym in symbol_list]
+        # calculate the date range
+        start_date = dt.date.fromisoformat(self.options.get("start"))
+        end_date = dt.date.fromisoformat(self.options.get("end"))
+        num_dates = (end_date - start_date).days + 1
+        all_dates = [start_date + dt.timedelta(days=x) for x in range(num_dates)]
+        # partitions for all symbols and dates
+        return [SymbolDatePartition(sym, d) for sym in symbol_list for d in all_dates]
 
-    @property
-    @abstractmethod
-    def api_params(self) -> Dict[str, Any]:
+    def api_params(self, partition: SymbolDatePartition) -> Dict[str, Any]:
         """Get API parameters for requests.
 
-        Subclasses should implement this to return data-source-specific parameters.
+        Args:
+            partition: the current partition
+
+        Returns: API parameters for the current partition
         """
-        pass
+        return {
+            "symbols": partition.symbol,
+            "start": partition.date,
+            "end": partition.date,
+            "limit": int(self.options.get("limit", DEFAULT_LIMIT)),
+        }
 
     @property
     @abstractmethod
@@ -339,15 +353,14 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             PyArrow RecordBatch objects, one per API page
         """
         # Ensure partition is SymbolPartition
-        if not isinstance(partition, SymbolPartition):
+        if not isinstance(partition, SymbolDatePartition):
             raise ValueError(f"Expected SymbolPartition, got {type(partition)}")
 
         # Set up the page fetcher function
         get_page = build_page_fetcher(self.endpoint, self.headers, self.path_elements)
 
         # Get base params and set symbol
-        params = self.api_params
-        params["symbols"] = partition.symbol
+        params = self.api_params(partition)
 
         # process all pages of results
         for pg in fetch_all_pages(get_page, params):

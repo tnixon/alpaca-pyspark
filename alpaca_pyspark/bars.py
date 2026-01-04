@@ -8,7 +8,7 @@ from pyspark.sql.types import StructType
 from .common import (
     BaseAlpacaDataSource,
     BaseAlpacaReader,
-    DEFAULT_LIMIT,
+    DEFAULT_LIMIT, SymbolDatePartition,
 )
 
 # Set up logger
@@ -77,15 +77,10 @@ class HistoricalBarsDataSource(BaseAlpacaDataSource):
 class HistoricalBarsReader(BaseAlpacaReader):
     """Reader implementation for historical bars data source."""
 
-    @property
-    def api_params(self) -> Dict[str, Any]:
-        """Get API parameters for bars requests."""
-        return {
-            "timeframe": self.options["timeframe"],
-            "start": self.options["start"],
-            "end": self.options["end"],
-            "limit": int(self.options.get("limit", DEFAULT_LIMIT)),
-        }
+    def api_params(self, partition: SymbolDatePartition) -> Dict[str, Any]:
+        params = super().api_params(partition)
+        params["timeframe"] = self.options["timeframe"]
+        return params
 
     @property
     def data_key(self) -> str:
