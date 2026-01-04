@@ -4,7 +4,7 @@ import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from time import sleep
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union, Callable
 
 import pyarrow as pa
 import requests
@@ -22,6 +22,8 @@ RETRY_DELAY = 1.0
 # Type alias for symbols option
 Symbols_Option_Type = Union[str, List[str], Tuple[str, ...]]
 
+# Type alias for page fetcher function signature
+Page_Fetcher_SigType = Callable[[Session, Dict[str, Any], Optional[str]], Dict[str, Any]]
 
 @dataclass
 class SymbolPartition(InputPartition):
@@ -63,7 +65,7 @@ def build_url(endpoint: str, path_elements: List[str], params: Dict[str, Any]) -
     return f"{endpoint}/{path}?{param_str}"
 
 
-def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: List[str]):
+def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: List[str]) -> Page_Fetcher_SigType:
     """Build a page fetcher function with enhanced error handling.
 
     Args:
@@ -110,6 +112,42 @@ def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: Li
             raise RequestException(f"Network request failed: {e}") from e
 
     return get_page
+
+def fetch_all_pages(page_fetcher_fn: Page_Fetcher_SigType, params: Dict[str, Any], num_retries: int = MAX_RETRIES) \
+        -> Iterator[Dict[str, Any]]:
+    """
+    Fetch all pages of data from the API, with retries
+    :return:
+    """
+    # Configure session
+    with requests.Session() as sess:
+        num_pages = 0
+        next_page_token: Optional[str] = None
+
+        # Cycle through pages
+        while next_page_token or num_pages < 1:
+            retry_count = 0
+
+            # Retry loop
+            while retry_count < num_retries:
+                try:
+                    pg = page_fetcher_fn(sess, params, next_page_token)
+                    break  # Success, exit retry loop
+                except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+                    retry_count += 1
+                    # fail after
+                    if retry_count >= num_retries:
+                        raise ValueError(f"API request failed after {num_retries} retries") from e
+
+                    # increase delay on each retry
+                    sleep(RETRY_DELAY * retry_count)
+
+            # yield up the page of results
+            yield pg
+
+            # Go to next page
+            num_pages += 1
+            next_page_token = pg.get("next_page_token", None)
 
 
 class BaseAlpacaDataSource(DataSource, ABC):
@@ -284,43 +322,14 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         params = self.api_params
         params["symbols"] = partition.symbol
 
-        # Configure session
-        with requests.Session() as sess:
-            num_pages = 0
-            next_page_token: Optional[str] = None
-
-            # Cycle through pages
-            while next_page_token or num_pages < 1:
-                retry_count = 0
-
-                # Retry loop
-                while retry_count < MAX_RETRIES:
-                    try:
-                        pg = get_page(sess, params, next_page_token)
-                        break  # Success, exit retry loop
-                    except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
-                        retry_count += 1
-                        if retry_count >= MAX_RETRIES:
-                            logger.error(
-                                f"Failed to fetch data for symbol {partition.symbol} after {MAX_RETRIES} retries: {e}"
-                            )
-                            raise ValueError(
-                                f"API request failed for symbol {partition.symbol} after {MAX_RETRIES} retries"
-                            ) from e
-
-                        logger.warning(f"Retry {retry_count} for symbol {partition.symbol}: {e}")
-                        sleep(RETRY_DELAY * retry_count)
-
-                # Process page as a single batch
-                if self.data_key in pg and pg[self.data_key]:
-                    # Let subclass parse the page into a batch
-                    batch = self._parse_page_to_batch(pg[self.data_key], partition.symbol)
-                    if batch is not None:
-                        yield batch
-
-                # Go to next page
-                num_pages += 1
-                next_page_token = pg.get("next_page_token", None)
+        # process all pages of results
+        for pg in fetch_all_pages(get_page, params):
+            # Process page as a single batch
+            if self.data_key in pg and pg[self.data_key]:
+                # Let subclass parse the page into a batch
+                batch = self._parse_page_to_batch(pg[self.data_key], partition.symbol)
+                if batch is not None:
+                    yield batch
 
     def _parse_page_to_batch(self, data: Dict[str, List[Dict[str, Any]]], symbol: str) -> Optional[pa.RecordBatch]:
         """Parse a page of data into a PyArrow RecordBatch.
