@@ -132,7 +132,7 @@ def retriable_session(num_retries: int = MAX_RETRIES) -> Session:
         total=5,  # Total number of retries
         backoff_factor=1,  # Wait [0.5s, 1s, 2s, 4s, 8s...] between retries
         status_forcelist=[429, 500, 502, 503, 504],  # Retry on these HTTP codes
-        allowed_methods=["HEAD", "GET", "OPTIONS"]  # Only retry safe/idempotent methods
+        allowed_methods=["HEAD", "GET", "OPTIONS"],  # Only retry safe/idempotent methods
     )
 
     # Create the adapter and mount it to the session
