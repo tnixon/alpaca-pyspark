@@ -25,6 +25,7 @@ Symbols_Option_Type = Union[str, List[str], Tuple[str, ...]]
 # Type alias for page fetcher function signature
 Page_Fetcher_SigType = Callable[[Session, Dict[str, Any], Optional[str]], Dict[str, Any]]
 
+
 @dataclass
 class SymbolPartition(InputPartition):
     """Partition representing a single stock symbol for parallel processing."""
@@ -113,11 +114,22 @@ def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: Li
 
     return get_page
 
-def fetch_all_pages(page_fetcher_fn: Page_Fetcher_SigType, params: Dict[str, Any], num_retries: int = MAX_RETRIES) \
-        -> Iterator[Dict[str, Any]]:
-    """
-    Fetch all pages of data from the API, with retries
-    :return:
+
+def fetch_all_pages(
+    page_fetcher_fn: Page_Fetcher_SigType, params: Dict[str, Any], num_retries: int = MAX_RETRIES
+) -> Iterator[Dict[str, Any]]:
+    """Fetch all pages of data from the API with retry logic.
+
+    Args:
+        page_fetcher_fn: Function to fetch a single page of data
+        params: Base query parameters for API requests
+        num_retries: Maximum number of retry attempts (default: MAX_RETRIES)
+
+    Yields:
+        Dict[str, Any]: JSON response from each API page
+
+    Raises:
+        ValueError: If all retry attempts fail
     """
     # Configure session
     with requests.Session() as sess:
