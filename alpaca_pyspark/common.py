@@ -287,8 +287,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         if not symbol_list:
             raise ValueError("No symbols provided for data fetching")
         # calculate the date range
-        start_date = dt.date.fromisoformat(self.options.get("start"))
-        end_date = dt.date.fromisoformat(self.options.get("end"))
+        start_date = dt.datetime.fromisoformat(self.options.get("start")).date()
+        end_date = dt.datetime.fromisoformat(self.options.get("end")).date()
         num_dates = (end_date - start_date).days + 1
         all_dates = [start_date + dt.timedelta(days=x) for x in range(num_dates)]
         # partitions for all symbols and dates
