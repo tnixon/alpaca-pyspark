@@ -8,7 +8,8 @@ A high-performance PySpark connector for importing market data from the Alpaca M
 
 ### Key Features
 
-- **Distributed Data Fetching**: Automatically parallelizes API requests across stock symbols
+- **Distributed Data Fetching**: Automatically parallelizes API requests across stock symbols and time ranges
+- **Intelligent Partitioning**: Dynamically sizes partitions based on data volume for optimal load balancing
 - **PyArrow Batch Processing**: Uses Apache Arrow for high-performance data transfer (up to 10x faster than row-by-row processing)
 - **Resilient**: Built-in retry logic with exponential backoff for network failures
 - **Type-Safe**: Strict schema definitions ensure data consistency
@@ -137,7 +138,7 @@ alpaca-pyspark/
 ├── pyproject.toml           # Poetry configuration and dependencies
 ├── README.md                # This file
 ├── CLAUDE.md                # Development guidelines for AI assistants
-└── Test Historical Bars DS.ipynb  # Example notebook
+└── Test Historical API.ipynb  # Example notebook
 ```
 
 ### Key Components
@@ -145,7 +146,7 @@ alpaca-pyspark/
 - **DataSource Classes** (`bars.py`, `trades.py`): Define schema and validate options for each data type
 - **DataSourceReader Classes** (`bars.py`, `trades.py`): Implement the data fetching logic with PyArrow batch support
 - **Base Classes** (`common.py`): Abstract base classes providing common functionality for all data sources
-- **Partition Classes** (`common.py`): Enable parallel processing by distributing work across symbols
+- **Partition Classes** (`common.py`): Enable parallel processing by distributing work across symbols and time ranges
 - **Utility Functions** (`common.py`): Common functionality for URL building and API requests
 
 ## Development
@@ -214,13 +215,42 @@ poetry run pytest
 
 ## Architecture
 
-### Parallel Processing
+### Parallel Processing and Partitioning Strategies
 
-The library partitions data requests by stock symbol, allowing Spark to:
+The library uses intelligent partitioning to maximize parallel processing efficiency. Data requests are partitioned by **both stock symbol and time range**, allowing Spark to:
 
 - Execute API requests in parallel across multiple executors
 - Scale horizontally by adding more Spark workers
 - Handle large numbers of symbols efficiently
+- Distribute large time ranges across multiple partitions for better load balancing
+
+#### Default Time-Range Partitioning
+
+By default, all data sources partition requests into 1-day intervals. For example, if you request data for 3 symbols over a 7-day period, the library creates 21 partitions (3 symbols × 7 days), enabling highly parallel data fetching.
+
+**Key behaviors:**
+- If the time range is less than the partition interval (e.g., less than 1 day), no temporal partitioning occurs—only symbol-based partitioning is used
+- Each partition fetches data for a single symbol within a specific time range
+- Time range intervals are calculated automatically based on the start and end times
+
+#### Bars-Specific Intelligent Partitioning
+
+For historical bars data, the partitioning strategy is more sophisticated. The partition interval is calculated dynamically based on:
+
+- **Timeframe**: The bar granularity (e.g., `1Min`, `1Hour`, `1Day`)
+- **Limit**: Maximum bars per API request (default: 10,000)
+- **Expected Pages**: Target number of API pages per partition (default: 5 pages)
+
+This approach estimates how many bars to expect within a given time period and sizes partitions accordingly. For example:
+- **Fine-grained data** (e.g., `1Min` bars over weeks/months): Creates smaller time ranges per partition to avoid overwhelming individual partitions with too many API pages
+- **Coarse-grained data** (e.g., `1Day` bars over years): Creates larger time ranges per partition since fewer data points exist per unit of time
+
+**Formula:**
+```
+partition_interval = total_time_range / max(1, ceil((total_time_range / timeframe) / (limit × pages_per_partition)))
+```
+
+This ensures that each partition handles approximately the same amount of data, regardless of the bar timeframe, leading to better load distribution across Spark executors.
 
 ### PyArrow Batching
 

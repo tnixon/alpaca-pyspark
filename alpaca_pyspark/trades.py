@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime as dt
-from typing import Any, Dict, List, Tuple, Union, Iterable
+from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import pyarrow as pa
 from pyspark.sql.types import StructType
@@ -8,7 +8,6 @@ from pyspark.sql.types import StructType
 from .common import (
     BaseAlpacaDataSource,
     BaseAlpacaReader,
-    DEFAULT_LIMIT,
 )
 
 # Set up logger
@@ -69,15 +68,6 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
 
 class HistoricalTradesReader(BaseAlpacaReader):
     """Reader implementation for historical trades data source."""
-
-    @property
-    def api_params(self) -> Dict[str, Any]:
-        """Get API parameters for trades requests."""
-        return {
-            "start": self.options["start"],
-            "end": self.options["end"],
-            "limit": int(self.options.get("limit", DEFAULT_LIMIT)),
-        }
 
     @property
     def data_key(self) -> str:

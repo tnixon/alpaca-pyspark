@@ -1,6 +1,10 @@
 import logging
-from datetime import datetime as dt
-from typing import Any, Dict, List, Tuple, Union, Iterable
+import math
+import re
+from datetime import datetime as dt, timedelta as td
+from enum import Enum
+from functools import cached_property
+from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import pyarrow as pa
 from pyspark.sql.types import StructType
@@ -8,14 +12,53 @@ from pyspark.sql.types import StructType
 from .common import (
     BaseAlpacaDataSource,
     BaseAlpacaReader,
-    DEFAULT_LIMIT,
+    SymbolTimeRangePartition,
 )
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
+# Constants
+PAGES_PER_PARTITION = 5
+
 # Type alias for bar data tuple: symbol, time, open, high, low, close, volume, trade_count, vwap
 BarTuple = Tuple[str, dt, float, float, float, float, int, int, float]
+
+
+class TimeUnit(Enum):
+    MINUTE = "minute"
+    HOUR = "hour"
+    DAY = "day"
+    WEEK = "week"
+    MONTH = "month"
+
+    @classmethod
+    def _missing_(cls, value):
+        # expecting a string
+        if not isinstance(value, str):
+            value = str(value)
+        # treat as case-invariant
+        value = value.lower()
+        # Remove trailing 's' for plural forms
+        if value.endswith("s"):
+            value = value[:-1]
+        # Map alternate representations
+        alt_map = {
+            "min": cls.MINUTE,
+            "minute": cls.MINUTE,
+            "t": cls.MINUTE,
+            "h": cls.HOUR,
+            "hour": cls.HOUR,
+            "d": cls.DAY,
+            "day": cls.DAY,
+            "w": cls.WEEK,
+            "week": cls.WEEK,
+            "m": cls.MONTH,
+            "month": cls.MONTH,
+        }
+        if value in alt_map:
+            return alt_map[value]
+        raise ValueError(f"Unknown time unit: {value}")
 
 
 class HistoricalBarsDataSource(BaseAlpacaDataSource):
@@ -77,15 +120,10 @@ class HistoricalBarsDataSource(BaseAlpacaDataSource):
 class HistoricalBarsReader(BaseAlpacaReader):
     """Reader implementation for historical bars data source."""
 
-    @property
-    def api_params(self) -> Dict[str, Any]:
-        """Get API parameters for bars requests."""
-        return {
-            "timeframe": self.options["timeframe"],
-            "start": self.options["start"],
-            "end": self.options["end"],
-            "limit": int(self.options.get("limit", DEFAULT_LIMIT)),
-        }
+    def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, Any]:
+        params = super().api_params(partition)
+        params["timeframe"] = self.options["timeframe"]
+        return params
 
     @property
     def data_key(self) -> str:
@@ -96,6 +134,36 @@ class HistoricalBarsReader(BaseAlpacaReader):
     def path_elements(self) -> List[str]:
         """URL path for bars endpoint."""
         return ["stocks", "bars"]
+
+    @cached_property
+    def timeframe(self) -> td:
+        tf = self.options.get("timeframe", "")
+        match = re.match(r"^(\d+)([A-Za-z]+)(s?)$", tf)
+        if not match:
+            raise ValueError(f"Invalid timeframe format: {tf}")
+        number = int(match.group(1))
+        unit = TimeUnit(match.group(2))
+
+        if unit == TimeUnit.MINUTE:
+            return td(minutes=number)
+        elif unit == TimeUnit.HOUR:
+            return td(hours=number)
+        elif unit == TimeUnit.DAY:
+            return td(days=number)
+        elif unit == TimeUnit.WEEK:
+            # approximate a trading week as 5 days
+            return td(days=(5 * number))
+        elif unit == TimeUnit.MONTH:
+            # Approximate a trading month as 20 days
+            return td(days=(20 * number))
+        else:
+            raise ValueError(f"Unsupported TimeUnit: {unit}")
+
+    @property
+    def partition_interval(self) -> td:
+        range_td = self.end - self.start
+        num_intervals = max(1, math.ceil((range_td / self.timeframe) / (self.limit * PAGES_PER_PARTITION)))
+        return range_td / num_intervals
 
     def _parse_record(self, symbol: str, record: Dict[str, Any]) -> BarTuple:
         """Parse a single bar from API response into tuple format.

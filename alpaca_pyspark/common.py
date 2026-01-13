@@ -1,9 +1,13 @@
 import ast
 import logging
+import math
+import time
 import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union, Callable
+from datetime import datetime as dt, timedelta as td
+from functools import cached_property
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import pyarrow as pa
 import requests
@@ -28,10 +32,12 @@ Page_Fetcher_SigType = Callable[[Session, Dict[str, Any], Optional[str]], Dict[s
 
 
 @dataclass
-class SymbolPartition(InputPartition):
-    """Partition representing a single stock symbol for parallel processing."""
+class SymbolTimeRangePartition(InputPartition):
+    """Partition representing a single stock symbol on a single date for parallel processing."""
 
     symbol: str
+    start: dt
+    end: dt
 
 
 def build_url(endpoint: str, path_elements: List[str], params: Dict[str, Any]) -> str:
@@ -144,14 +150,18 @@ def retriable_session(num_retries: int = MAX_RETRIES) -> Session:
 
 
 def fetch_all_pages(
-    page_fetcher_fn: Page_Fetcher_SigType, params: Dict[str, Any], num_retries: int = MAX_RETRIES
+    page_fetcher_fn: Page_Fetcher_SigType,
+    params: Dict[str, Any],
+    num_retries: int = MAX_RETRIES,
+    rate_limit_delay: float = 0.0,
 ) -> Iterator[Dict[str, Any]]:
-    """Fetch all pages of data from the API with retry logic.
+    """Fetch all pages of data from the API with retry logic and optional rate limiting.
 
     Args:
         page_fetcher_fn: Function to fetch a single page of data
         params: Base query parameters for API requests
         num_retries: Maximum number of retry attempts (default: MAX_RETRIES)
+        rate_limit_delay: Seconds to sleep between page fetches (default: 0.0, disabled)
 
     Yields:
         Dict[str, Any]: JSON response from each API page
@@ -175,6 +185,10 @@ def fetch_all_pages(
             # Go to next page
             num_pages += 1
             next_page_token = pg.get("next_page_token", None)
+
+            # Apply rate limiting if configured and there are more pages
+            if rate_limit_delay > 0 and next_page_token:
+                time.sleep(rate_limit_delay)
 
 
 class BaseAlpacaDataSource(DataSource, ABC):
@@ -214,6 +228,24 @@ class BaseAlpacaDataSource(DataSource, ABC):
                 raise ValueError("Symbols list cannot be empty")
         else:
             raise ValueError(f"Symbols must be a list, tuple, " f"or string representation, got {type(symbols)}")
+
+        # Validate start and end datetime formats
+        start_str = self.options.get("start", "")
+        end_str = self.options.get("end", "")
+
+        try:
+            start_t = dt.fromisoformat(start_str)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid 'start' option: '{start_str}' is not a valid ISO format datetime") from e
+
+        try:
+            end_t = dt.fromisoformat(end_str)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid 'end' option: '{end_str}' is not a valid ISO format datetime") from e
+
+        # make sure that start is before end
+        if start_t > end_t:
+            raise ValueError(f"start time is after end time: {start_t} > {end_t}")
 
         # Allow subclasses to perform additional validation
         self._validate_additional_options()
@@ -265,7 +297,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         """Get API endpoint URL."""
         return self.options.get("endpoint", DEFAULT_DATA_ENDPOINT)
 
-    @property
+    @cached_property
     def symbols(self) -> List[str]:
         """Get the list of symbols to fetch data for.
 
@@ -279,21 +311,56 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             # Already a list/tuple (already validated in DataSource)
             return list(symbols)
 
-    def partitions(self) -> Sequence[SymbolPartition]:
-        """Create partitions for parallel processing, one per symbol."""
+    @cached_property
+    def start(self) -> dt:
+        return dt.fromisoformat(self.options.get("start", ""))
+
+    @cached_property
+    def end(self) -> dt:
+        return dt.fromisoformat(self.options.get("end", ""))
+
+    @cached_property
+    def limit(self) -> int:
+        return int(self.options.get("limit", DEFAULT_LIMIT))
+
+    @property
+    def partition_interval(self) -> td:
+        return td(days=1)
+
+    def partitions(self) -> Sequence[SymbolTimeRangePartition]:
+        """Create partitions for parallel processing, one per symbol per date."""
         symbol_list = self.symbols
         if not symbol_list:
             raise ValueError("No symbols provided for data fetching")
-        return [SymbolPartition(sym) for sym in symbol_list]
+        # calculate the date range
+        range_td = self.end - self.start
+        interval_td = self.partition_interval
+        num_intervals = math.ceil(range_td / interval_td)
+        # don't bother partitioning by datetime if only 1 interval
+        if num_intervals < 2:
+            return [SymbolTimeRangePartition(sym, start=self.start, end=self.end) for sym in symbol_list]
+        # otherwise, build a set of time intervals
+        interval_bounds = [
+            (self.start + i * interval_td, min([self.start + (i + 1) * interval_td, self.end]))
+            for i in range(num_intervals)
+        ]
+        # partitions for all symbols and intervals
+        return [SymbolTimeRangePartition(sym, s, e) for sym in symbol_list for s, e in interval_bounds]
 
-    @property
-    @abstractmethod
-    def api_params(self) -> Dict[str, Any]:
+    def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, Any]:
         """Get API parameters for requests.
 
-        Subclasses should implement this to return data-source-specific parameters.
+        Args:
+            partition: the current partition
+
+        Returns: API parameters for the current partition
         """
-        pass
+        return {
+            "symbols": partition.symbol,
+            "start": partition.start.isoformat(),
+            "end": partition.end.isoformat(),
+            "limit": self.limit,
+        }
 
     @property
     @abstractmethod
@@ -339,18 +406,20 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             PyArrow RecordBatch objects, one per API page
         """
         # Ensure partition is SymbolPartition
-        if not isinstance(partition, SymbolPartition):
+        if not isinstance(partition, SymbolTimeRangePartition):
             raise ValueError(f"Expected SymbolPartition, got {type(partition)}")
 
         # Set up the page fetcher function
         get_page = build_page_fetcher(self.endpoint, self.headers, self.path_elements)
 
         # Get base params and set symbol
-        params = self.api_params
-        params["symbols"] = partition.symbol
+        params = self.api_params(partition)
+
+        # Get rate limit delay from options (default: 0.0, disabled)
+        rate_limit_delay = float(self.options.get("rate_limit_delay", 0.0))
 
         # process all pages of results
-        for pg in fetch_all_pages(get_page, params):
+        for pg in fetch_all_pages(get_page, params, rate_limit_delay=rate_limit_delay):
             # Process page as a single batch
             if self.data_key in pg and pg[self.data_key]:
                 # Let subclass parse the page into a batch
