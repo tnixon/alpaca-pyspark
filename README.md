@@ -29,7 +29,7 @@ A high-performance PySpark connector for importing market data from the Alpaca M
 import datetime as dt
 from zoneinfo import ZoneInfo
 from pyspark.sql import SparkSession
-from alpaca_pyspark import HistoricalBarsDataSource
+from alpaca_pyspark.stocks import HistoricalBarsDataSource
 
 # Initialize Spark session
 spark = SparkSession.builder.appName("AlpacaExample").getOrCreate()
@@ -128,10 +128,16 @@ The project is organized as follows:
 ```
 alpaca-pyspark/
 ├── alpaca_pyspark/          # Main package directory
-│   ├── bars.py              # Historical bars data source implementation
-│   ├── trades.py            # Historical trades data source implementation
 │   ├── common.py            # Shared base classes, utilities, and partitioning logic
-│   └── __init__.py          # Package exports
+│   ├── stocks/              # Stock market data sources
+│   │   ├── bars.py          # Historical bars data source implementation
+│   │   ├── trades.py        # Historical trades data source implementation
+│   │   └── __init__.py      # Stocks sub-module exports
+│   ├── options/             # Options data sources (placeholder)
+│   │   └── __init__.py
+│   ├── crypto/              # Crypto data sources (placeholder)
+│   │   └── __init__.py
+│   └── __init__.py          # Package root
 ├── .github/
 │   └── workflows/
 │       └── lint.yml         # CI/CD workflow for code quality checks
@@ -143,9 +149,9 @@ alpaca-pyspark/
 
 ### Key Components
 
-- **DataSource Classes** (`bars.py`, `trades.py`): Define schema and validate options for each data type
-- **DataSourceReader Classes** (`bars.py`, `trades.py`): Implement the data fetching logic with PyArrow batch support
-- **Base Classes** (`common.py`): Abstract base classes providing common functionality for all data sources
+- **DataSource Classes** (`stocks/bars.py`, `stocks/trades.py`): Define schema and validate options for stock data types
+- **DataSourceReader Classes** (`stocks/bars.py`, `stocks/trades.py`): Implement the data fetching logic with PyArrow batch support
+- **Base Classes** (`common.py`): Abstract base classes providing common functionality for all asset types
 - **Partition Classes** (`common.py`): Enable parallel processing by distributing work across symbols and time ranges
 - **Utility Functions** (`common.py`): Common functionality for URL building and API requests
 

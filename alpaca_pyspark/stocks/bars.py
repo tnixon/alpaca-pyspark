@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List, Tuple, Union
 import pyarrow as pa
 from pyspark.sql.types import StructType
 
-from .common import (
+from ..common import (
     BaseAlpacaDataSource,
     BaseAlpacaReader,
     SymbolTimeRangePartition,
