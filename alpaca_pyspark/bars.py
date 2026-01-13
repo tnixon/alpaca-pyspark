@@ -24,6 +24,7 @@ PAGES_PER_PARTITION = 5
 # Type alias for bar data tuple: symbol, time, open, high, low, close, volume, trade_count, vwap
 BarTuple = Tuple[str, dt, float, float, float, float, int, int, float]
 
+
 class TimeUnit(Enum):
     MINUTE = "minute"
     HOUR = "hour"
@@ -58,6 +59,7 @@ class TimeUnit(Enum):
         if value in alt_map:
             return alt_map[value]
         raise ValueError(f"Unknown time unit: {value}")
+
 
 class HistoricalBarsDataSource(BaseAlpacaDataSource):
     """PySpark DataSource for Alpaca's historical bars data.
@@ -160,7 +162,7 @@ class HistoricalBarsReader(BaseAlpacaReader):
     @property
     def partition_interval(self) -> td:
         range_td = self.end - self.start
-        num_intervals = max(1, math.ceil( (range_td/self.timeframe) / (self.limit * PAGES_PER_PARTITION)))
+        num_intervals = max(1, math.ceil((range_td/self.timeframe) / (self.limit * PAGES_PER_PARTITION)))
         return range_td / num_intervals
 
     def _parse_record(self, symbol: str, record: Dict[str, Any]) -> BarTuple:
