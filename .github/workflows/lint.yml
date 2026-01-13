@@ -4,13 +4,18 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - '**.py'
+      - 'alpaca_pyspark/**/*.py'
       - 'pyproject.toml'
       - 'poetry.lock'
       - '.flake8'
   push:
     branches:
       - main
+    paths:
+      - 'alpaca_pyspark/**/*.py'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+      - '.flake8'
 
 jobs:
   ruff-format:
