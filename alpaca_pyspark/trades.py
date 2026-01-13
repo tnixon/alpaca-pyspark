@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime as dt
-from typing import Any, Dict, List, Tuple, Union, Iterable
+from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import pyarrow as pa
 from pyspark.sql.types import StructType
@@ -8,7 +8,6 @@ from pyspark.sql.types import StructType
 from .common import (
     BaseAlpacaDataSource,
     BaseAlpacaReader,
-    DEFAULT_LIMIT,
 )
 
 # Set up logger

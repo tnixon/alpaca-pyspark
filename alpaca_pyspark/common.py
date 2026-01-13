@@ -1,11 +1,12 @@
 import ast
 import logging
+import math
 import time
 import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union, Callable
-import datetime as dt
+from datetime import datetime as dt, timedelta as td
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import pyarrow as pa
 import requests
@@ -30,11 +31,12 @@ Page_Fetcher_SigType = Callable[[Session, Dict[str, Any], Optional[str]], Dict[s
 
 
 @dataclass
-class SymbolDatePartition(InputPartition):
+class SymbolTimeRangePartition(InputPartition):
     """Partition representing a single stock symbol on a single date for parallel processing."""
 
     symbol: str
-    date: dt.date
+    start: dt
+    end: dt
 
 
 def build_url(endpoint: str, path_elements: List[str], params: Dict[str, Any]) -> str:
@@ -231,12 +233,12 @@ class BaseAlpacaDataSource(DataSource, ABC):
         end_str = self.options.get("end", "")
 
         try:
-            start_t = dt.datetime.fromisoformat(start_str)
+            start_t = dt.fromisoformat(start_str)
         except (ValueError, TypeError) as e:
             raise ValueError(f"Invalid 'start' option: '{start_str}' is not a valid ISO format datetime") from e
 
         try:
-            end_t = dt.datetime.fromisoformat(end_str)
+            end_t = dt.fromisoformat(end_str)
         except (ValueError, TypeError) as e:
             raise ValueError(f"Invalid 'end' option: '{end_str}' is not a valid ISO format datetime") from e
 
@@ -308,20 +310,32 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             # Already a list/tuple (already validated in DataSource)
             return list(symbols)
 
-    def partitions(self) -> Sequence[SymbolDatePartition]:
-        """Create partitions for parallel processing, one per symbol."""
+    @property
+    def partition_interval(self) -> td:
+        return td(days=1)
+
+    def partitions(self) -> Sequence[SymbolTimeRangePartition]:
+        """Create partitions for parallel processing, one per symbol per date."""
         symbol_list = self.symbols
         if not symbol_list:
             raise ValueError("No symbols provided for data fetching")
         # calculate the date range
-        start_date = dt.datetime.fromisoformat(self.options.get("start")).date()
-        end_date = dt.datetime.fromisoformat(self.options.get("end")).date()
-        num_dates = (end_date - start_date).days + 1
-        all_dates = [start_date + dt.timedelta(days=x) for x in range(num_dates)]
-        # partitions for all symbols and dates
-        return [SymbolDatePartition(sym, d) for sym in symbol_list for d in all_dates]
+        start = dt.fromisoformat(self.options.get("start"))
+        end = dt.fromisoformat(self.options.get("end"))
+        range_td = end - start
+        interval_td = self.partition_interval
+        num_intervals = math.ceil(range_td / interval_td)
+        # don't bother partitioning by datetime if only 1 interval
+        if num_intervals < 2:
+            return [SymbolTimeRangePartition(sym, start=start, end=end) for sym in symbol_list]
+        # otherwise, build a set of time intervals
+        interval_bounds = [(start + i*interval_td,
+                            min([start + (i+1)*interval_td, end]))
+                           for i in range(num_intervals)]
+        # partitions for all symbols and intervals
+        return [SymbolTimeRangePartition(sym, s, e) for sym in symbol_list for s, e in interval_bounds]
 
-    def api_params(self, partition: SymbolDatePartition) -> Dict[str, Any]:
+    def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, Any]:
         """Get API parameters for requests.
 
         Args:
@@ -331,8 +345,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         """
         return {
             "symbols": partition.symbol,
-            "start": partition.date,
-            "end": partition.date,
+            "start": partition.start.isoformat(),
+            "end": partition.end.isoformat(),
             "limit": int(self.options.get("limit", DEFAULT_LIMIT)),
         }
 
@@ -380,7 +394,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             PyArrow RecordBatch objects, one per API page
         """
         # Ensure partition is SymbolPartition
-        if not isinstance(partition, SymbolDatePartition):
+        if not isinstance(partition, SymbolTimeRangePartition):
             raise ValueError(f"Expected SymbolPartition, got {type(partition)}")
 
         # Set up the page fetcher function
