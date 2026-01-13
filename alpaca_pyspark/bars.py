@@ -40,7 +40,7 @@ class TimeUnit(Enum):
         # treat as case-invariant
         value = value.lower()
         # Remove trailing 's' for plural forms
-        if value.endswith('s'):
+        if value.endswith("s"):
             value = value[:-1]
         # Map alternate representations
         alt_map = {
@@ -162,7 +162,7 @@ class HistoricalBarsReader(BaseAlpacaReader):
     @property
     def partition_interval(self) -> td:
         range_td = self.end - self.start
-        num_intervals = max(1, math.ceil((range_td/self.timeframe) / (self.limit * PAGES_PER_PARTITION)))
+        num_intervals = max(1, math.ceil((range_td / self.timeframe) / (self.limit * PAGES_PER_PARTITION)))
         return range_td / num_intervals
 
     def _parse_record(self, symbol: str, record: Dict[str, Any]) -> BarTuple:

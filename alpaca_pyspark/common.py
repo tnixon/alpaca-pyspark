@@ -340,9 +340,10 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         if num_intervals < 2:
             return [SymbolTimeRangePartition(sym, start=self.start, end=self.end) for sym in symbol_list]
         # otherwise, build a set of time intervals
-        interval_bounds = [(self.start + i*interval_td,
-                            min([self.start + (i+1)*interval_td, self.end]))
-                           for i in range(num_intervals)]
+        interval_bounds = [
+            (self.start + i * interval_td, min([self.start + (i + 1) * interval_td, self.end]))
+            for i in range(num_intervals)
+        ]
         # partitions for all symbols and intervals
         return [SymbolTimeRangePartition(sym, s, e) for sym in symbol_list for s, e in interval_bounds]
 
