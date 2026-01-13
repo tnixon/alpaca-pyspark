@@ -135,7 +135,7 @@ class HistoricalBarsReader(BaseAlpacaReader):
 
     @cached_property
     def timeframe(self) -> td:
-        tf = self.options.get("timeframe", None)
+        tf = self.options.get("timeframe", "")
         match = re.match(r"^(\d+)([A-Za-z]+)(s?)$", tf)
         if not match:
             raise ValueError(f"Invalid timeframe format: {tf}")

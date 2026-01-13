@@ -313,11 +313,11 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
     @cached_property
     def start(self) -> dt:
-        return dt.fromisoformat(self.options.get("start"))
+        return dt.fromisoformat(self.options.get("start", ""))
 
     @cached_property
     def end(self) -> dt:
-        return dt.fromisoformat(self.options.get("end"))
+        return dt.fromisoformat(self.options.get("end", ""))
 
     @cached_property
     def limit(self) -> int:
