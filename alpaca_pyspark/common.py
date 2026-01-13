@@ -6,6 +6,7 @@ import urllib.parse as urlp
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime as dt, timedelta as td
+from functools import cached_property
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import pyarrow as pa
@@ -296,7 +297,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         """Get API endpoint URL."""
         return self.options.get("endpoint", DEFAULT_DATA_ENDPOINT)
 
-    @property
+    @cached_property
     def symbols(self) -> List[str]:
         """Get the list of symbols to fetch data for.
 
@@ -310,6 +311,18 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             # Already a list/tuple (already validated in DataSource)
             return list(symbols)
 
+    @cached_property
+    def start(self) -> dt:
+        return dt.fromisoformat(self.options.get("start"))
+
+    @cached_property
+    def end(self) -> dt:
+        return dt.fromisoformat(self.options.get("end"))
+
+    @cached_property
+    def limit(self) -> int:
+        return int(self.options.get("limit", DEFAULT_LIMIT))
+
     @property
     def partition_interval(self) -> td:
         return td(days=1)
@@ -320,17 +333,15 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         if not symbol_list:
             raise ValueError("No symbols provided for data fetching")
         # calculate the date range
-        start = dt.fromisoformat(self.options.get("start"))
-        end = dt.fromisoformat(self.options.get("end"))
-        range_td = end - start
+        range_td = self.end - self.start
         interval_td = self.partition_interval
         num_intervals = math.ceil(range_td / interval_td)
         # don't bother partitioning by datetime if only 1 interval
         if num_intervals < 2:
-            return [SymbolTimeRangePartition(sym, start=start, end=end) for sym in symbol_list]
+            return [SymbolTimeRangePartition(sym, start=self.start, end=self.end) for sym in symbol_list]
         # otherwise, build a set of time intervals
-        interval_bounds = [(start + i*interval_td,
-                            min([start + (i+1)*interval_td, end]))
+        interval_bounds = [(self.start + i*interval_td,
+                            min([self.start + (i+1)*interval_td, self.end]))
                            for i in range(num_intervals)]
         # partitions for all symbols and intervals
         return [SymbolTimeRangePartition(sym, s, e) for sym in symbol_list for s, e in interval_bounds]
@@ -347,7 +358,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
             "symbols": partition.symbol,
             "start": partition.start.isoformat(),
             "end": partition.end.isoformat(),
-            "limit": int(self.options.get("limit", DEFAULT_LIMIT)),
+            "limit": self.limit,
         }
 
     @property
