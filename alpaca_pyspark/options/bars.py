@@ -1,4 +1,5 @@
 """PySpark DataSource for Alpaca's option historical bars data."""
+
 import logging
 from typing import List
 

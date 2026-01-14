@@ -3,10 +3,11 @@
 This module provides common functionality for historical bars data (OHLCV candles)
 that is shared across stocks, options, crypto, and other asset classes.
 """
+
 import logging
 import math
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from datetime import datetime as dt, timedelta as td
 from enum import Enum
 from functools import cached_property
