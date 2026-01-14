@@ -18,6 +18,10 @@ pyarrow-stubs = "^19.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+pytest-mock = "^3.12.0"
+responses = "^0.24.0"
+freezegun = "^1.4.0"
 ruff = "^0.8.0"
 flake8 = "^6.0.0"
 mypy = "^1.5.0"
@@ -35,3 +39,27 @@ line-ending = "auto"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--cov=alpaca_pyspark",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+markers = [
+    "unit: Pure unit tests (no external dependencies)",
+    "integration: Integration tests with mocked external services",
+    "spark: Tests requiring Spark session (may be slow)",
+    "slow: Tests that take significant time to run",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pyspark.*",
+    "ignore::FutureWarning:pyspark.*",
+]
