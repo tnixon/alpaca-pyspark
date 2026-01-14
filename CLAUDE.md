@@ -168,6 +168,185 @@ The project uses three tools for code quality:
 
 All three run independently in CI/CD (see `.github/workflows/lint.yml`)
 
+## Testing Guidelines
+
+### When to Write Tests
+
+**Always write tests for:**
+- New features and functionality
+- Bug fixes (test should fail before fix, pass after)
+- Changes to core utilities or base classes
+- New DataSource implementations
+- API interaction code
+
+**Tests are optional for:**
+- Documentation-only changes
+- Trivial formatting changes
+- Experimental code clearly marked as such
+
+### Test Organization
+
+Tests mirror the source code structure:
+- `tests/unit/test_common.py` → tests for `alpaca_pyspark/common.py`
+- `tests/unit/test_bars.py` → tests for `alpaca_pyspark/bars.py`
+- `tests/unit/test_stocks_bars.py` → tests for `alpaca_pyspark/stocks/bars.py`
+
+### Using Test Fixtures
+
+Common fixtures are available in `tests/conftest.py`:
+
+```python
+def test_something(sample_symbols, base_options):
+    """sample_symbols and base_options are auto-injected by pytest."""
+    datasource = MyDataSource(base_options)
+    assert datasource.symbols == sample_symbols
+```
+
+For mocking HTTP requests, use the `mock_alpaca_api` fixture:
+
+```python
+def test_api_call(mock_alpaca_api):
+    """Mock Alpaca API responses."""
+    from tests.fixtures.mock_responses import MOCK_BARS_RESPONSE
+
+    mock_alpaca_api.add(
+        responses.GET,
+        "https://data.alpaca.markets/v2/stocks/bars",
+        json=MOCK_BARS_RESPONSE,
+        status=200
+    )
+
+    # Your test code here
+```
+
+### Mocking Strategy
+
+**HTTP Requests:**
+- Use `responses` library via `mock_alpaca_api` fixture
+- Define mock responses in `tests/fixtures/mock_responses.py` for reuse
+- Never make real API calls in unit tests
+
+**Datetime/Time:**
+- Use `freezegun` for deterministic date/time testing
+- Example: `@freeze_time("2021-01-15 12:00:00")`
+
+**Spark:**
+- Unit tests should NOT create real Spark sessions
+- Test DataSource/Reader logic independently
+- Save full Spark integration for `tests/spark/` directory
+
+### Test Naming and Structure
+
+**File naming:**
+- Test files: `test_*.py`
+- Match source file name: `test_common.py` tests `common.py`
+
+**Class naming:**
+- Group related tests: `class TestBuildUrl:`
+- Use descriptive names: `class TestSymbolTimeRangePartition:`
+
+**Function naming:**
+- Use `test_` prefix: `def test_simple_url():`
+- Descriptive: `def test_url_with_none_params():`
+- Include expected behavior: `def test_missing_required_option_raises_error():`
+
+**Test structure (Arrange-Act-Assert):**
+```python
+def test_something():
+    """Test that something works correctly."""
+    # Arrange: Set up test data
+    url = "https://api.example.com"
+    params = {"key": "value"}
+
+    # Act: Execute the code being tested
+    result = build_url(url, ["path"], params)
+
+    # Assert: Verify expected behavior
+    assert "key=value" in result
+```
+
+### Test Markers
+
+Mark tests appropriately for selective execution:
+
+```python
+@pytest.mark.unit
+def test_pure_unit_test():
+    """Fast test, no external dependencies."""
+    pass
+
+@pytest.mark.integration
+def test_with_mocked_api():
+    """Integration test with mocked HTTP."""
+    pass
+
+@pytest.mark.spark
+def test_with_spark_session():
+    """Test requiring Spark."""
+    pass
+```
+
+### Parameterized Tests
+
+Use `@pytest.mark.parametrize` for testing multiple inputs:
+
+```python
+@pytest.mark.parametrize("timeframe,expected", [
+    ("1Min", timedelta(minutes=1)),
+    ("1Hour", timedelta(hours=1)),
+    ("1Day", timedelta(days=1)),
+])
+def test_timeframe_parsing(timeframe, expected):
+    result = parse_timeframe(timeframe)
+    assert result == expected
+```
+
+### Coverage Expectations
+
+**Target coverage by module:**
+- Core utilities (`common.py`): 80%+
+- Abstract base classes (`bars.py`): 85%+
+- Concrete implementations (`stocks/bars.py`, etc.): 70%+
+- Overall project: 70-80%
+
+**Acceptable coverage gaps:**
+- Error paths requiring real Spark runtime errors
+- Complex network retry edge cases
+- Performance-critical paths better tested via integration
+
+### What NOT to Test
+
+- **External library functionality**: Don't test that requests.get() works
+- **Third-party integrations**: Don't test PySpark internals
+- **Obvious getters/setters**: Don't test trivial property access
+- **Python language features**: Don't test that dataclasses work
+
+### Running Tests During Development
+
+Before committing code:
+
+1. Run tests for the module you changed:
+   ```bash
+   poetry run pytest tests/unit/test_common.py
+   ```
+
+2. Run all unit tests (fast):
+   ```bash
+   poetry run pytest -m unit
+   ```
+
+3. Check coverage:
+   ```bash
+   poetry run pytest --cov=alpaca_pyspark
+   ```
+
+4. Run code quality checks:
+   ```bash
+   poetry run ruff format alpaca_pyspark/ tests/
+   poetry run flake8 alpaca_pyspark/ tests/
+   poetry run mypy alpaca_pyspark/
+   ```
+
 ## Questions or Clarifications
 
 When implementation details are unclear:
