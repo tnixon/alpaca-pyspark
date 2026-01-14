@@ -29,13 +29,13 @@ A high-performance PySpark connector for importing market data from the Alpaca M
 import datetime as dt
 from zoneinfo import ZoneInfo
 from pyspark.sql import SparkSession
-from alpaca_pyspark.stocks import StockBarsDataSource
+from alpaca_pyspark.stocks import HistoricalBarsDataSource
 
 # Initialize Spark session
 spark = SparkSession.builder.appName("AlpacaExample").getOrCreate()
 
 # Register the data source
-spark.dataSource.register(StockBarsDataSource)
+spark.dataSource.register(HistoricalBarsDataSource)
 
 # Configure the data source options
 tz = ZoneInfo("America/New_York")
@@ -51,7 +51,7 @@ options = {
 
 # Load data as a DataFrame
 df = (spark.read
-      .format("Alpaca_HistoricalBars")
+      .format("Alpaca_Stocks_Bars")
       .options(**options)
       .load())
 
@@ -93,6 +93,46 @@ The Historical Bars data source returns DataFrames with the following schema:
 | trade_count | INT | Number of trades |
 | vwap | FLOAT | Volume-weighted average price |
 
+## Available Data Sources
+
+The library provides data sources following a consistent naming pattern: `Alpaca_<AssetType>_<DataType>`
+
+### Stocks
+
+| DataSource Name | Python Class | Description |
+|----------------|--------------|-------------|
+| `Alpaca_Stocks_Bars` | `HistoricalBarsDataSource` | Historical OHLCV bars/candles for stocks |
+| `Alpaca_Stocks_Trades` | `HistoricalTradesDataSource` | Historical tick-by-tick trades for stocks |
+
+### Options
+
+| DataSource Name | Python Class | Description |
+|----------------|--------------|-------------|
+| `Alpaca_Options_Bars` | `HistoricalOptionBarsDataSource` | Historical OHLCV bars/candles for options contracts |
+
+### Usage Examples
+
+**Stock Bars:**
+```python
+from alpaca_pyspark.stocks import HistoricalBarsDataSource
+spark.dataSource.register(HistoricalBarsDataSource)
+df = spark.read.format("Alpaca_Stocks_Bars").options(**options).load()
+```
+
+**Stock Trades:**
+```python
+from alpaca_pyspark.stocks import HistoricalTradesDataSource
+spark.dataSource.register(HistoricalTradesDataSource)
+df = spark.read.format("Alpaca_Stocks_Trades").options(**options).load()
+```
+
+**Option Bars:**
+```python
+from alpaca_pyspark.options import HistoricalOptionBarsDataSource
+spark.dataSource.register(HistoricalOptionBarsDataSource)
+df = spark.read.format("Alpaca_Options_Bars").options(**options).load()
+```
+
 ## Installation
 
 This project uses [Poetry](https://python-poetry.org/) for dependency management.
@@ -129,12 +169,14 @@ The project is organized as follows:
 alpaca-pyspark/
 ├── alpaca_pyspark/          # Main package directory
 │   ├── common.py            # Shared base classes, utilities, and partitioning logic
+│   ├── bars.py              # Abstract base classes for bars data sources
 │   ├── stocks/              # Stock market data sources
-│   │   ├── bars.py          # Historical bars data source implementation
-│   │   ├── trades.py        # Historical trades data source implementation
+│   │   ├── bars.py          # Stock historical bars data source implementation
+│   │   ├── trades.py        # Stock historical trades data source implementation
 │   │   └── __init__.py      # Stocks sub-module exports
-│   ├── options/             # Options data sources (placeholder)
-│   │   └── __init__.py
+│   ├── options/             # Options data sources
+│   │   ├── bars.py          # Options historical bars data source implementation
+│   │   └── __init__.py      # Options sub-module exports
 │   ├── crypto/              # Crypto data sources (placeholder)
 │   │   └── __init__.py
 │   └── __init__.py          # Package root
@@ -149,9 +191,10 @@ alpaca-pyspark/
 
 ### Key Components
 
-- **DataSource Classes** (`stocks/bars.py`, `stocks/trades.py`): Define schema and validate options for stock data types
-- **DataSourceReader Classes** (`stocks/bars.py`, `stocks/trades.py`): Implement the data fetching logic with PyArrow batch support
-- **Base Classes** (`common.py`): Abstract base classes providing common functionality for all asset types
+- **Base Classes** (`common.py`): Universal abstract base classes (`BaseAlpacaDataSource`, `BaseAlpacaReader`) providing common functionality for all asset types and data types
+- **Bars Abstract Classes** (`bars.py`): Abstract base classes (`AbstractBarsDataSource`, `AbstractBarsReader`) providing shared functionality for bars (OHLCV) data across all asset types
+- **DataSource Implementations** (`stocks/bars.py`, `options/bars.py`, `stocks/trades.py`): Asset-specific implementations that extend the abstract base classes
+- **DataSourceReader Implementations**: Implement the data fetching logic with PyArrow batch support for each data type
 - **Partition Classes** (`common.py`): Enable parallel processing by distributing work across symbols and time ranges
 - **Utility Functions** (`common.py`): Common functionality for URL building and API requests
 
@@ -275,6 +318,45 @@ Built-in resilience features include:
 - Graceful handling of malformed data (logged as warnings, not failures)
 - Connection timeout management
 - Comprehensive error logging
+
+### Class Hierarchy and Code Reuse
+
+The library uses a layered inheritance architecture to maximize code reuse and maintain consistency across asset types:
+
+```
+BaseAlpacaDataSource (common.py)
+├── AbstractBarsDataSource (bars.py)
+│   ├── HistoricalBarsDataSource (stocks/bars.py)
+│   └── HistoricalOptionBarsDataSource (options/bars.py)
+└── HistoricalTradesDataSource (stocks/trades.py)
+
+BaseAlpacaReader (common.py)
+├── AbstractBarsReader (bars.py)
+│   ├── HistoricalBarsReader (stocks/bars.py)
+│   └── HistoricalOptionBarsReader (options/bars.py)
+└── HistoricalTradesReader (stocks/trades.py)
+```
+
+**Benefits of this architecture:**
+
+1. **Universal Base Classes** (`common.py`): Common functionality for all data sources including:
+   - API authentication and request handling
+   - Retry logic with exponential backoff
+   - Symbol parsing and validation
+   - Partition generation
+   - PyArrow batch conversion
+
+2. **Data-Type Abstract Classes** (`bars.py`): Shared functionality for specific data types across all asset types:
+   - Bars (OHLCV) data: Common schema, timeframe parsing, partition sizing
+   - Eliminates duplication between stocks bars and options bars implementations
+   - Makes adding new asset types (e.g., crypto bars) require minimal code
+
+3. **Asset-Specific Implementations**: Each implementation only needs to define:
+   - DataSource name (following the `Alpaca_<AssetType>_<DataType>` pattern)
+   - API endpoint path (e.g., `["stocks", "bars"]` vs `["options", "bars"]`)
+   - Any asset-specific parsing logic (if needed)
+
+This design follows the **DRY (Don't Repeat Yourself)** principle and makes the codebase highly maintainable and extensible.
 
 ## API Credentials
 
