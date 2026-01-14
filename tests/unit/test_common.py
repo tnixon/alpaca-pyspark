@@ -1,4 +1,5 @@
 """Tests for alpaca_pyspark/common.py - core utilities and base classes."""
+
 import pytest
 from datetime import datetime as dt
 from alpaca_pyspark.common import (
@@ -14,11 +15,7 @@ class TestBuildUrl:
 
     def test_simple_url(self):
         """Test URL building with basic parameters."""
-        url = build_url(
-            "https://api.example.com",
-            ["stocks", "bars"],
-            {"symbol": "AAPL", "limit": 1000}
-        )
+        url = build_url("https://api.example.com", ["stocks", "bars"], {"symbol": "AAPL", "limit": 1000})
 
         assert "https://api.example.com/stocks/bars?" in url
         assert "symbol=AAPL" in url
@@ -27,9 +24,7 @@ class TestBuildUrl:
     def test_url_with_none_params(self):
         """Test that None parameters are excluded from query string."""
         url = build_url(
-            "https://api.example.com",
-            ["stocks", "bars"],
-            {"symbol": "AAPL", "page_token": None, "limit": 1000}
+            "https://api.example.com", ["stocks", "bars"], {"symbol": "AAPL", "page_token": None, "limit": 1000}
         )
 
         assert "symbol=AAPL" in url
@@ -38,11 +33,7 @@ class TestBuildUrl:
 
     def test_url_encoding_special_characters(self):
         """Test that special characters are properly encoded."""
-        url = build_url(
-            "https://api.example.com",
-            ["stocks", "bars"],
-            {"symbol": "BRK.B"}
-        )
+        url = build_url("https://api.example.com", ["stocks", "bars"], {"symbol": "BRK.B"})
 
         # Either encoded or unencoded dot is acceptable
         assert "BRK.B" in url or "BRK%2EB" in url
@@ -52,12 +43,7 @@ class TestBuildUrl:
         url = build_url(
             "https://api.example.com",
             ["stocks", "bars"],
-            {
-                "symbol": "AAPL",
-                "start": "2021-01-01",
-                "end": "2021-01-31",
-                "limit": 5000
-            }
+            {"symbol": "AAPL", "start": "2021-01-01", "end": "2021-01-31", "limit": 5000},
         )
 
         assert "symbol=AAPL" in url
@@ -67,21 +53,13 @@ class TestBuildUrl:
 
     def test_url_with_empty_params(self):
         """Test URL building with empty parameters dict."""
-        url = build_url(
-            "https://api.example.com",
-            ["stocks", "bars"],
-            {}
-        )
+        url = build_url("https://api.example.com", ["stocks", "bars"], {})
 
         assert url == "https://api.example.com/stocks/bars?"
 
     def test_url_with_nested_path(self):
         """Test URL with multiple path elements."""
-        url = build_url(
-            "https://api.example.com/v2",
-            ["stocks", "bars", "latest"],
-            {"symbol": "AAPL"}
-        )
+        url = build_url("https://api.example.com/v2", ["stocks", "bars", "latest"], {"symbol": "AAPL"})
 
         assert "https://api.example.com/v2/stocks/bars/latest?" in url
         assert "symbol=AAPL" in url

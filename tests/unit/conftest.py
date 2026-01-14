@@ -1,4 +1,5 @@
 """Unit test specific fixtures."""
+
 import pytest
 import responses
 

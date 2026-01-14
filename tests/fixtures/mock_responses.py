@@ -1,5 +1,7 @@
 """Mock API response data for testing."""
 
+from typing import Any, Dict
+
 # Single page of bars data
 MOCK_BARS_RESPONSE = {
     "bars": {
@@ -12,7 +14,7 @@ MOCK_BARS_RESPONSE = {
                 "c": 131.5,
                 "v": 1000000,
                 "n": 5000,
-                "vw": 131.0
+                "vw": 131.0,
             },
             {
                 "t": "2021-01-01T10:30:00Z",
@@ -22,11 +24,11 @@ MOCK_BARS_RESPONSE = {
                 "c": 132.5,
                 "v": 1100000,
                 "n": 5500,
-                "vw": 132.0
-            }
+                "vw": 132.0,
+            },
         ]
     },
-    "next_page_token": None
+    "next_page_token": None,
 }
 
 # First page of paginated bars data
@@ -41,11 +43,11 @@ MOCK_BARS_RESPONSE_PAGE1 = {
                 "c": 131.5,
                 "v": 1000000,
                 "n": 5000,
-                "vw": 131.0
+                "vw": 131.0,
             }
         ]
     },
-    "next_page_token": "token123"
+    "next_page_token": "token123",
 }
 
 # Second page of paginated bars data
@@ -60,45 +62,26 @@ MOCK_BARS_RESPONSE_PAGE2 = {
                 "c": 132.5,
                 "v": 1100000,
                 "n": 5500,
-                "vw": 132.0
+                "vw": 132.0,
             }
         ]
     },
-    "next_page_token": None
+    "next_page_token": None,
 }
 
 # Single page of trades data
 MOCK_TRADES_RESPONSE = {
     "trades": {
         "AAPL": [
-            {
-                "t": "2021-01-01T09:30:00Z",
-                "x": "V",
-                "p": 131.0,
-                "s": 100,
-                "c": [],
-                "i": 12345,
-                "z": "C"
-            },
-            {
-                "t": "2021-01-01T09:30:01Z",
-                "x": "V",
-                "p": 131.5,
-                "s": 200,
-                "c": ["@", "I"],
-                "i": 12346,
-                "z": "C"
-            }
+            {"t": "2021-01-01T09:30:00Z", "x": "V", "p": 131.0, "s": 100, "c": [], "i": 12345, "z": "C"},
+            {"t": "2021-01-01T09:30:01Z", "x": "V", "p": 131.5, "s": 200, "c": ["@", "I"], "i": 12346, "z": "C"},
         ]
     },
-    "next_page_token": None
+    "next_page_token": None,
 }
 
 # Empty response
-MOCK_EMPTY_RESPONSE = {
-    "bars": {},
-    "next_page_token": None
-}
+MOCK_EMPTY_RESPONSE: Dict[str, Any] = {"bars": {}, "next_page_token": None}
 
 # Malformed bar record (missing required fields)
 MOCK_MALFORMED_BAR = {
@@ -111,5 +94,5 @@ MOCK_MALFORMED_BAR = {
             }
         ]
     },
-    "next_page_token": None
+    "next_page_token": None,
 }
