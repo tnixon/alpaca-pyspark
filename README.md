@@ -29,13 +29,13 @@ A high-performance PySpark connector for importing market data from the Alpaca M
 import datetime as dt
 from zoneinfo import ZoneInfo
 from pyspark.sql import SparkSession
-from alpaca_pyspark.stocks import HistoricalBarsDataSource
+from alpaca_pyspark.stocks import StockBarsDataSource
 
 # Initialize Spark session
 spark = SparkSession.builder.appName("AlpacaExample").getOrCreate()
 
 # Register the data source
-spark.dataSource.register(HistoricalBarsDataSource)
+spark.dataSource.register(StockBarsDataSource)
 
 # Configure the data source options
 tz = ZoneInfo("America/New_York")

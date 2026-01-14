@@ -1,4 +1,4 @@
-from .bars import HistoricalBarsDataSource
-from .trades import HistoricalTradesDataSource
+from .bars import StockBarsDataSource
+from .trades import StockTradesDataSource
 
-__all__ = ["HistoricalBarsDataSource", "HistoricalTradesDataSource"]
+__all__ = ["StockBarsDataSource", "StockTradesDataSource"]

@@ -1,4 +1,4 @@
-"""PySpark DataSource for Alpaca's stock historical bars data."""
+"""PySpark DataSource for Alpaca's option historical bars data."""
 import logging
 from typing import List
 
@@ -13,11 +13,11 @@ from ..bars import (
 logger = logging.getLogger(__name__)
 
 
-class StockBarsDataSource(AbstractBarsDataSource):
-    """PySpark DataSource for Alpaca's historical bars data.
+class OptionBarsDataSource(AbstractBarsDataSource):
+    """PySpark DataSource for Alpaca's historical option bars data.
 
     Required options:
-        - symbols: List of stock symbols or string representation of list
+        - symbols: List of option symbols or string representation of list (OCC format)
         - APCA-API-KEY-ID: Alpaca API key ID
         - APCA-API-SECRET-KEY: Alpaca API secret key
         - timeframe: Time frame for bars (e.g., '1Day', '1Hour')
@@ -31,16 +31,16 @@ class StockBarsDataSource(AbstractBarsDataSource):
 
     @classmethod
     def name(cls) -> str:
-        return "Alpaca_Stocks_Bars"
+        return "Alpaca_Options_Bars"
 
-    def reader(self, schema: StructType) -> "HistoricalStockBarsReader":
-        return HistoricalStockBarsReader(self.pa_schema, self.options)
+    def reader(self, schema: StructType) -> "HistoricalOptionBarsReader":
+        return HistoricalOptionBarsReader(self.pa_schema, self.options)
 
 
-class HistoricalStockBarsReader(AbstractBarsReader):
-    """Reader implementation for historical bars data source."""
+class HistoricalOptionBarsReader(AbstractBarsReader):
+    """Reader implementation for historical option bars data source."""
 
     @property
     def path_elements(self) -> List[str]:
-        """URL path for bars endpoint."""
-        return ["stocks", "bars"]
+        """URL path for option bars endpoint."""
+        return ["options", "bars"]

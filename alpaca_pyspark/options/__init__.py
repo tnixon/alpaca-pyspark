@@ -1,1 +1,3 @@
-# Placeholder for future options data sources
+from .bars import OptionBarsDataSource
+
+__all__ = ["OptionBarsDataSource"]

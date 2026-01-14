@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 TradeTuple = Tuple[str, dt, str, float, int, str, int, str]
 
 
-class HistoricalTradesDataSource(BaseAlpacaDataSource):
+class StockTradesDataSource(BaseAlpacaDataSource):
     """PySpark DataSource for Alpaca's historical trades data.
 
     Required options:
@@ -34,7 +34,7 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
 
     @classmethod
     def name(cls) -> str:
-        return "Alpaca_HistoricalTrades"
+        return "Alpaca_Stocks_Trades"
 
     def schema(self) -> Union[StructType, str]:
         return """
@@ -62,11 +62,11 @@ class HistoricalTradesDataSource(BaseAlpacaDataSource):
         ]
         return pa.schema(fields)
 
-    def reader(self, schema: StructType) -> "HistoricalTradesReader":
-        return HistoricalTradesReader(self.pa_schema, self.options)
+    def reader(self, schema: StructType) -> "HistoricalStockTradesReader":
+        return HistoricalStockTradesReader(self.pa_schema, self.options)
 
 
-class HistoricalTradesReader(BaseAlpacaReader):
+class HistoricalStockTradesReader(BaseAlpacaReader):
     """Reader implementation for historical trades data source."""
 
     @property
