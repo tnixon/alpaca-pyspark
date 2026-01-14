@@ -254,13 +254,96 @@ poetry run flake8 alpaca_pyspark/ && \
 poetry run mypy alpaca_pyspark/
 ```
 
+### Testing
+
+The project uses pytest for testing with comprehensive coverage of core functionality.
+
 #### Running Tests
 
-Execute the test suite:
+Run all tests with coverage:
 
 ```bash
 poetry run pytest
 ```
+
+Run only unit tests (fast, no external dependencies):
+
+```bash
+poetry run pytest -m unit
+```
+
+Run tests without coverage (faster):
+
+```bash
+poetry run pytest --no-cov
+```
+
+Run specific test file:
+
+```bash
+poetry run pytest tests/unit/test_common.py
+```
+
+Run specific test class or function:
+
+```bash
+poetry run pytest tests/unit/test_common.py::TestBuildUrl
+poetry run pytest tests/unit/test_common.py::TestBuildUrl::test_simple_url
+```
+
+Run failed tests from last run:
+
+```bash
+poetry run pytest --lf
+```
+
+#### Test Organization
+
+Tests are organized into three categories:
+
+- **Unit Tests** (`tests/unit/`): Pure unit tests with mocked external dependencies
+  - Fast execution (seconds)
+  - No network calls or real API access
+  - Test individual functions and classes in isolation
+
+- **Integration Tests** (`tests/integration/`): Tests with mocked APIs
+  - Test complete workflows end-to-end
+  - Use mock HTTP responses via `responses` library
+
+- **Spark Tests** (`tests/spark/`): Tests requiring Spark session
+  - May be slower to execute
+  - Test full DataSource integration with Spark SQL
+  - Marked with `@pytest.mark.spark` for selective execution
+
+#### Test Markers
+
+Tests are marked for selective execution:
+
+- `@pytest.mark.unit`: Pure unit tests (no external deps)
+- `@pytest.mark.integration`: Integration tests with mocked services
+- `@pytest.mark.spark`: Tests requiring Spark session
+- `@pytest.mark.slow`: Tests that take significant time
+
+#### Coverage Reports
+
+After running tests with coverage, view the detailed HTML report:
+
+```bash
+open htmlcov/index.html
+```
+
+The project targets 70-80% overall coverage with higher coverage (85%+) for core utilities.
+
+#### Test Fixtures
+
+Common test fixtures are available in `tests/conftest.py`:
+
+- `sample_symbols`: List of test stock symbols
+- `sample_date_range`: Test date range with timezone
+- `api_credentials`: Mock API credentials
+- `base_options`: Complete options dict for DataSource testing
+
+Mock API responses are defined in `tests/fixtures/mock_responses.py` for consistent testing.
 
 ## Architecture
 
