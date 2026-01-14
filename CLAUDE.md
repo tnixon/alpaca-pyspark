@@ -37,10 +37,10 @@ This project implements PySpark DataSource connectors for the Alpaca Markets API
 3. **Resilient API Calls**: Built-in retry logic with exponential backoff
 
 ### Key Components
-- **DataSource Classes** (`bars.py`, `trades.py`): Define schema and validate options
-- **DataSourceReader Classes** (`bars.py`, `trades.py`): Implement data fetching with PyArrow batch support
-- **Base Classes** (`common.py`): Abstract base classes (`BaseAlpacaDataSource`, `BaseAlpacaReader`) providing common functionality
-- **Partition Classes** (`common.py`): Enable parallel processing by distributing work
+- **DataSource Classes** (`stocks/bars.py`, `stocks/trades.py`): Define schema and validate options for stock data types
+- **DataSourceReader Classes** (`stocks/bars.py`, `stocks/trades.py`): Implement data fetching with PyArrow batch support
+- **Base Classes** (`common.py`): Abstract base classes (`BaseAlpacaDataSource`, `BaseAlpacaReader`) providing common functionality for all asset types
+- **Partition Classes** (`common.py`): Enable parallel processing by distributing work across symbols and time ranges
 - **Utility Functions** (`common.py`): Shared functionality for URL building and API requests
 
 ### Important Documentation
@@ -107,14 +107,26 @@ When modifying data source implementations:
 ## Common Tasks
 
 ### Adding New Data Source Types
-If implementing additional Alpaca data types (quotes, etc.):
-1. Extend `BaseAlpacaDataSource` and `BaseAlpacaReader` from `common.py`
-2. Follow the pattern established in `bars.py` or `trades.py`
-3. Define schema matching Alpaca API response
-4. Implement required abstract methods (`api_params`, `data_key`, `path_elements`, `_parse_record`)
-5. Use type aliases for complex return types (e.g., `BarTuple`, `TradeTuple`)
-6. PyArrow batching and partitioning are handled by base classes
-7. Register the data source in `__init__.py`
+
+#### For Stock Data Types
+If implementing additional stock data types (quotes, snapshots, etc.):
+1. Create new file in `stocks/` directory (e.g., `stocks/quotes.py`)
+2. Extend `BaseAlpacaDataSource` and `BaseAlpacaReader` from `common.py`
+3. Follow the pattern established in `stocks/bars.py` or `stocks/trades.py`
+4. Define schema matching Alpaca API response
+5. Implement required abstract methods (`api_params`, `data_key`, `path_elements`, `_parse_record`)
+6. Use type aliases for complex return types (e.g., `BarTuple`, `TradeTuple`)
+7. PyArrow batching and partitioning are handled by base classes
+8. Add to `stocks/__init__.py` for auto-import
+
+#### For New Asset Types (Options, Crypto)
+If implementing data sources for options or crypto:
+1. Create implementation files in the appropriate sub-module directory (e.g., `options/chains.py`, `crypto/bars.py`)
+2. Extend `BaseAlpacaDataSource` and `BaseAlpacaReader` from `common.py`
+3. Follow the pattern established in `stocks/bars.py` or `stocks/trades.py`
+4. Define asset-type-specific schema matching Alpaca API response
+5. Implement required abstract methods
+6. Update the sub-module's `__init__.py` for auto-imports
 
 ### Modifying API Requests
 When changing how API requests are made:
@@ -159,7 +171,7 @@ All three run independently in CI/CD (see `.github/workflows/lint.yml`)
 ## Questions or Clarifications
 
 When implementation details are unclear:
-- Check existing patterns in `bars.py`, `trades.py`, and `common.py`
+- Check existing patterns in `stocks/bars.py`, `stocks/trades.py`, and `common.py`
 - Consult linked documentation (Alpaca API, PySpark DataSource API, PyArrow)
 - Ask the user for clarification rather than making assumptions
 - Consider whether the change fits within the current task scope

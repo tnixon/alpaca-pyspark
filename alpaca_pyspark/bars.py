@@ -1,6 +1,13 @@
+"""Abstract base classes for bars data sources across different asset types.
+
+This module provides common functionality for historical bars data (OHLCV candles)
+that is shared across stocks, options, crypto, and other asset classes.
+"""
+
 import logging
 import math
 import re
+from abc import ABC
 from datetime import datetime as dt, timedelta as td
 from enum import Enum
 from functools import cached_property
@@ -26,6 +33,8 @@ BarTuple = Tuple[str, dt, float, float, float, float, int, int, float]
 
 
 class TimeUnit(Enum):
+    """Time unit for bar timeframes with flexible parsing support."""
+
     MINUTE = "minute"
     HOUR = "hour"
     DAY = "day"
@@ -61,31 +70,23 @@ class TimeUnit(Enum):
         raise ValueError(f"Unknown time unit: {value}")
 
 
-class HistoricalBarsDataSource(BaseAlpacaDataSource):
-    """PySpark DataSource for Alpaca's historical bars data.
+class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
+    """Abstract base class for bars data sources.
 
-    Required options:
-        - symbols: List of stock symbols or string representation of list
-        - APCA-API-KEY-ID: Alpaca API key ID
-        - APCA-API-SECRET-KEY: Alpaca API secret key
-        - timeframe: Time frame for bars (e.g., '1Day', '1Hour')
-        - start: Start date/time (ISO format)
-        - end: End date/time (ISO format)
+    Provides common schema and validation for historical bars data (OHLCV candles)
+    across different asset types (stocks, options, crypto, etc.).
 
-    Optional options:
-        - endpoint: API endpoint URL (defaults to Alpaca's data endpoint)
-        - limit: Maximum number of bars per API call (default: 10000)
+    Subclasses must implement:
+        - name(): Return the datasource name string
+        - _create_reader(): Return an instance of the asset-specific reader
     """
 
     def _additional_required_options(self) -> List[str]:
         """Bars require the 'timeframe' option."""
         return ["timeframe"]
 
-    @classmethod
-    def name(cls) -> str:
-        return "Alpaca_HistoricalBars"
-
     def schema(self) -> Union[StructType, str]:
+        """Return the Spark SQL schema for bars data."""
         return """
             symbol STRING,
             time TIMESTAMP,
@@ -100,6 +101,7 @@ class HistoricalBarsDataSource(BaseAlpacaDataSource):
 
     @property
     def pa_schema(self) -> pa.Schema:
+        """Return the PyArrow schema for bars data."""
         fields: Iterable[tuple[str, pa.DataType]] = [
             ("symbol", pa.string()),
             ("time", pa.timestamp("us", tz="UTC")),
@@ -113,14 +115,19 @@ class HistoricalBarsDataSource(BaseAlpacaDataSource):
         ]
         return pa.schema(fields)
 
-    def reader(self, schema: StructType) -> "HistoricalBarsReader":
-        return HistoricalBarsReader(self.pa_schema, self.options)
 
+class AbstractBarsReader(BaseAlpacaReader, ABC):
+    """Abstract base class for bars data readers.
 
-class HistoricalBarsReader(BaseAlpacaReader):
-    """Reader implementation for historical bars data source."""
+    Provides common functionality for reading historical bars data (OHLCV candles)
+    from Alpaca APIs across different asset types.
+
+    Subclasses must implement:
+        - path_elements: Return the API endpoint path (e.g., ["stocks", "bars"])
+    """
 
     def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, Any]:
+        """Get API parameters including timeframe."""
         params = super().api_params(partition)
         params["timeframe"] = self.options["timeframe"]
         return params
@@ -130,13 +137,12 @@ class HistoricalBarsReader(BaseAlpacaReader):
         """Bars data is returned under the 'bars' key."""
         return "bars"
 
-    @property
-    def path_elements(self) -> List[str]:
-        """URL path for bars endpoint."""
-        return ["stocks", "bars"]
-
     @cached_property
     def timeframe(self) -> td:
+        """Parse timeframe option and return as timedelta.
+
+        Supports formats like: 1Day, 5Hour, 15Min, 1Week, 1Month
+        """
         tf = self.options.get("timeframe", "")
         match = re.match(r"^(\d+)([A-Za-z]+)(s?)$", tf)
         if not match:
@@ -161,6 +167,10 @@ class HistoricalBarsReader(BaseAlpacaReader):
 
     @property
     def partition_interval(self) -> td:
+        """Calculate the time interval for each partition.
+
+        Ensures each partition doesn't exceed limit * PAGES_PER_PARTITION records.
+        """
         range_td = self.end - self.start
         num_intervals = max(1, math.ceil((range_td / self.timeframe) / (self.limit * PAGES_PER_PARTITION)))
         return range_td / num_intervals
@@ -169,7 +179,7 @@ class HistoricalBarsReader(BaseAlpacaReader):
         """Parse a single bar from API response into tuple format.
 
         Args:
-            symbol: Stock symbol
+            symbol: Asset symbol
             record: Bar data dictionary from API response
 
         Returns:
