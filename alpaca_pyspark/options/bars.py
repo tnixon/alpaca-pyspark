@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_OPTS_BARS_ENDPOINT = "https://data.alpaca.markets/v1beta1"
 
+
 class OptionBarsDataSource(AbstractBarsDataSource):
     """PySpark DataSource for Alpaca's historical option bars data.
 

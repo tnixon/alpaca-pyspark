@@ -10,14 +10,7 @@ import pyarrow as pa
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.types import StructType
 
-from common import SymbolPartition
-from ..common import (
-    DEFAULT_DATA_ENDPOINT,
-    DEFAULT_LIMIT,
-    Symbols_Option_Type,
-    build_page_fetcher,
-    fetch_all_pages,
-)
+from ..common import build_page_fetcher, DEFAULT_LIMIT, fetch_all_pages, SymbolPartition, Symbols_Option_Type
 
 logger = logging.getLogger(__name__)
 
@@ -146,11 +139,7 @@ class OptionsContractsDataSource(DataSource):
             "APCA-API-SECRET-KEY",
         ]
 
-        missing = [
-            opt
-            for opt in required_options
-            if opt not in self.options or not self.options[opt]
-        ]
+        missing = [opt for opt in required_options if opt not in self.options or not self.options[opt]]
         if missing:
             raise ValueError(f"Missing required options: {missing}")
 
@@ -160,21 +149,17 @@ class OptionsContractsDataSource(DataSource):
             try:
                 parsed_symbols = ast.literal_eval(symbols)
                 if not isinstance(parsed_symbols, (list, tuple)) or not parsed_symbols:
-                    raise ValueError(
-                        "underlying_symbols must be a non-empty list or tuple"
-                    )
+                    raise ValueError("underlying_symbols must be a non-empty list or tuple")
             except (ValueError, SyntaxError) as e:
                 raise ValueError(
-                    f"Invalid underlying_symbols format '{symbols}'. "
-                    f"Must be a valid Python list/tuple string."
+                    f"Invalid underlying_symbols format '{symbols}'. " f"Must be a valid Python list/tuple string."
                 ) from e
         elif isinstance(symbols, (list, tuple)):
             if not symbols:
                 raise ValueError("underlying_symbols list cannot be empty")
         else:
             raise ValueError(
-                f"underlying_symbols must be a list, tuple, "
-                f"or string representation, got {type(symbols)}"
+                f"underlying_symbols must be a list, tuple, " f"or string representation, got {type(symbols)}"
             )
 
         # Validate type option if provided
@@ -280,9 +265,7 @@ class OptionsContractsReader(DataSourceReader):
                 if batch is not None:
                     yield batch
 
-    def _parse_page_to_batch(
-        self, contracts: List[Dict[str, Any]]
-    ) -> Optional[pa.RecordBatch]:
+    def _parse_page_to_batch(self, contracts: List[Dict[str, Any]]) -> Optional[pa.RecordBatch]:
         """Parse a page of contracts into a PyArrow RecordBatch.
 
         Args:
@@ -306,10 +289,7 @@ class OptionsContractsReader(DataSourceReader):
                 continue
 
         if buffer_size > 0:
-            parrays = [
-                pa.array(col_buffer[i], type=self.pa_schema.field(i).type)
-                for i in range(num_cols)
-            ]
+            parrays = [pa.array(col_buffer[i], type=self.pa_schema.field(i).type) for i in range(num_cols)]
             return pa.RecordBatch.from_arrays(parrays, schema=self.pa_schema)
         return None
 
@@ -331,18 +311,10 @@ class OptionsContractsReader(DataSourceReader):
 
             # Parse optional date fields
             open_interest_date_str = record.get("open_interest_date")
-            open_interest_date = (
-                date.fromisoformat(open_interest_date_str)
-                if open_interest_date_str
-                else None
-            )
+            open_interest_date = date.fromisoformat(open_interest_date_str) if open_interest_date_str else None
 
             close_price_date_str = record.get("close_price_date")
-            close_price_date = (
-                date.fromisoformat(close_price_date_str)
-                if close_price_date_str
-                else None
-            )
+            close_price_date = date.fromisoformat(close_price_date_str) if close_price_date_str else None
 
             # Parse optional numeric fields
             open_interest = record.get("open_interest")
@@ -373,6 +345,4 @@ class OptionsContractsReader(DataSourceReader):
                 close_price_date,
             )
         except (KeyError, ValueError, TypeError) as e:
-            raise ValueError(
-                f"Failed to parse contract data: {record}. Error: {e}"
-            ) from e
+            raise ValueError(f"Failed to parse contract data: {record}. Error: {e}") from e
