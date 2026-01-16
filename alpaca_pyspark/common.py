@@ -32,10 +32,16 @@ Page_Fetcher_SigType = Callable[[Session, Dict[str, Any], Optional[str]], Dict[s
 
 
 @dataclass
-class SymbolTimeRangePartition(InputPartition):
-    """Partition representing a single stock symbol on a single date for parallel processing."""
+class SymbolPartition(InputPartition):
+    """Partition for a single underlying symbol."""
 
     symbol: str
+
+
+@dataclass
+class SymbolTimeRangePartition(SymbolPartition):
+    """Partition representing a single stock symbol on a single date for parallel processing."""
+
     start: dt
     end: dt
 

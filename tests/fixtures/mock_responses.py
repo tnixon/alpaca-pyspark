@@ -96,3 +96,89 @@ MOCK_MALFORMED_BAR = {
     },
     "next_page_token": None,
 }
+
+# Single page of options contracts data
+MOCK_OPTIONS_CONTRACTS_RESPONSE = {
+    "option_contracts": [
+        {
+            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "symbol": "AAPL250117C00150000",
+            "name": "AAPL Jan 17 2025 150 Call",
+            "status": "active",
+            "tradable": True,
+            "expiration_date": "2025-01-17",
+            "root_symbol": "AAPL",
+            "underlying_symbol": "AAPL",
+            "underlying_asset_id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+            "type": "call",
+            "style": "american",
+            "strike_price": "150.00",
+            "size": 100,
+            "open_interest": 5000,
+            "open_interest_date": "2025-01-10",
+            "close_price": "5.25",
+            "close_price_date": "2025-01-10",
+        },
+        {
+            "id": "f6e5d4c3-b2a1-0987-fedc-ba0987654321",
+            "symbol": "AAPL250117P00150000",
+            "name": "AAPL Jan 17 2025 150 Put",
+            "status": "active",
+            "tradable": True,
+            "expiration_date": "2025-01-17",
+            "root_symbol": "AAPL",
+            "underlying_symbol": "AAPL",
+            "underlying_asset_id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+            "type": "put",
+            "style": "american",
+            "strike_price": "150.00",
+            "size": 100,
+            "open_interest": 3000,
+            "open_interest_date": "2025-01-10",
+            "close_price": "2.10",
+            "close_price_date": "2025-01-10",
+        },
+    ],
+    "next_page_token": None,
+}
+
+# Options contracts response with missing optional fields
+MOCK_OPTIONS_CONTRACTS_MINIMAL = {
+    "option_contracts": [
+        {
+            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "symbol": "AAPL250117C00150000",
+            "name": "AAPL Jan 17 2025 150 Call",
+            "status": "active",
+            "tradable": True,
+            "expiration_date": "2025-01-17",
+            "root_symbol": "AAPL",
+            "underlying_symbol": "AAPL",
+            "underlying_asset_id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+            "type": "call",
+            "style": "american",
+            "strike_price": "150.00",
+            "size": 100,
+            # No open_interest, open_interest_date, close_price, close_price_date
+        },
+    ],
+    "next_page_token": None,
+}
+
+# Empty options contracts response
+MOCK_OPTIONS_CONTRACTS_EMPTY: Dict[str, Any] = {
+    "option_contracts": [],
+    "next_page_token": None,
+}
+
+# Malformed options contract (missing required fields)
+MOCK_OPTIONS_CONTRACTS_MALFORMED = {
+    "option_contracts": [
+        {
+            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "symbol": "AAPL250117C00150000",
+            # Missing name, status, tradable, expiration_date, etc.
+        },
+    ],
+    "next_page_token": None,
+}

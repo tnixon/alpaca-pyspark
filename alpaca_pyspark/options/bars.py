@@ -13,6 +13,7 @@ from ..bars import (
 # Set up logger
 logger = logging.getLogger(__name__)
 
+DEFAULT_OPTS_BARS_ENDPOINT = "https://data.alpaca.markets/v1beta1"
 
 class OptionBarsDataSource(AbstractBarsDataSource):
     """PySpark DataSource for Alpaca's historical option bars data.
@@ -40,6 +41,11 @@ class OptionBarsDataSource(AbstractBarsDataSource):
 
 class HistoricalOptionBarsReader(AbstractBarsReader):
     """Reader implementation for historical option bars data source."""
+
+    @property
+    def endpoint(self) -> str:
+        """Get API endpoint URL."""
+        return self.options.get("endpoint", DEFAULT_OPTS_BARS_ENDPOINT)
 
     @property
     def path_elements(self) -> List[str]:

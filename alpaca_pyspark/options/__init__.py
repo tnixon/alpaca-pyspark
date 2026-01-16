@@ -1,3 +1,4 @@
 from .bars import OptionBarsDataSource
+from .contracts import OptionsContractsDataSource
 
-__all__ = ["OptionBarsDataSource"]
+__all__ = ["OptionBarsDataSource", "OptionsContractsDataSource"]
