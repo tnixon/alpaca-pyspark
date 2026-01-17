@@ -22,8 +22,17 @@ from alpaca_pyspark.options import OptionBarsDataSource
 
 spark.dataSource.register(OptionBarsDataSource)
 
+# Without date range (fetches recent data)
 df = spark.read.format("Alpaca_Options_Bars").options(**{
     "symbols": ["AAPL250117C00150000", "AAPL250117P00150000"],
+    "APCA-API-KEY-ID": "your-api-key",
+    "APCA-API-SECRET-KEY": "your-secret-key",
+    "timeframe": "1Day",
+}).load()
+
+# With date range
+df = spark.read.format("Alpaca_Options_Bars").options(**{
+    "symbols": ["AAPL250117C00150000"],
     "APCA-API-KEY-ID": "your-api-key",
     "APCA-API-SECRET-KEY": "your-secret-key",
     "timeframe": "1Day",
@@ -40,8 +49,8 @@ df = spark.read.format("Alpaca_Options_Bars").options(**{
 | `APCA-API-KEY-ID` | Yes | - | Alpaca API key ID |
 | `APCA-API-SECRET-KEY` | Yes | - | Alpaca API secret key |
 | `timeframe` | Yes | - | Bar timeframe (see values below) |
-| `start` | Yes | - | Start date/time in ISO format |
-| `end` | Yes | - | End date/time in ISO format |
+| `start` | No | - | Start date/time in ISO format |
+| `end` | No | - | End date/time in ISO format |
 | `endpoint` | No | `https://data.alpaca.markets/v1beta1` | API endpoint URL |
 | `limit` | No | `10000` | Maximum bars per API request |
 

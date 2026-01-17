@@ -209,10 +209,8 @@ class BaseAlpacaDataSource(DataSource, ABC):
 
     def _validate_options(self) -> None:
         """Validate that all required options are present and valid."""
-        # Check common required options
-        common_required = ["symbols", "APCA-API-KEY-ID", "APCA-API-SECRET-KEY", "start", "end"]
-        # Allow subclasses to add additional required options
-        required_options = common_required + self._additional_required_options()
+        # Allow subclasses to customize common required options
+        required_options = self._common_required_options() + self._additional_required_options()
 
         missing = [opt for opt in required_options if opt not in self.options or not self.options[opt]]
         if missing:
@@ -235,26 +233,40 @@ class BaseAlpacaDataSource(DataSource, ABC):
         else:
             raise ValueError(f"Symbols must be a list, tuple, " f"or string representation, got {type(symbols)}")
 
-        # Validate start and end datetime formats
+        # Validate start and end datetime formats if provided
         start_str = self.options.get("start", "")
         end_str = self.options.get("end", "")
 
-        try:
-            start_t = dt.fromisoformat(start_str)
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid 'start' option: '{start_str}' is not a valid ISO format datetime") from e
+        if start_str:
+            try:
+                start_t = dt.fromisoformat(start_str)
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid 'start' option: '{start_str}' is not a valid ISO format datetime") from e
+        else:
+            start_t = None
 
-        try:
-            end_t = dt.fromisoformat(end_str)
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid 'end' option: '{end_str}' is not a valid ISO format datetime") from e
+        if end_str:
+            try:
+                end_t = dt.fromisoformat(end_str)
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid 'end' option: '{end_str}' is not a valid ISO format datetime") from e
+        else:
+            end_t = None
 
-        # make sure that start is before end
-        if start_t > end_t:
+        # make sure that start is before end (if both provided)
+        if start_t is not None and end_t is not None and start_t > end_t:
             raise ValueError(f"start time is after end time: {start_t} > {end_t}")
 
         # Allow subclasses to perform additional validation
         self._validate_additional_options()
+
+    def _common_required_options(self) -> List[str]:
+        """Return list of common required options.
+
+        Subclasses can override this to customize which common options are required.
+        Default requires: symbols, API credentials, start, and end.
+        """
+        return ["symbols", "APCA-API-KEY-ID", "APCA-API-SECRET-KEY", "start", "end"]
 
     def _additional_required_options(self) -> List[str]:
         """Return list of additional required options beyond the common ones.
