@@ -36,6 +36,14 @@ class StockTradesDataSource(BaseAlpacaDataSource):
     def name(cls) -> str:
         return "Alpaca_Stocks_Trades"
 
+    def _optional_api_parameters(self) -> List[str]:
+        """Return trades-specific optional API parameters."""
+        return super()._optional_api_parameters() + [
+            "feed",  # iex, sip
+            "currency",  # currency for prices
+            "sort",  # asc or desc
+        ]
+
     def schema(self) -> Union[StructType, str]:
         return """
             symbol STRING,

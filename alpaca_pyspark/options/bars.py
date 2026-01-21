@@ -81,9 +81,7 @@ class HistoricalOptionBarsReader(AbstractBarsReader):
         # No date range - use symbol-only partitions
         return [SymbolPartition(symbol=sym) for sym in self.symbols]
 
-    def api_params(
-        self, partition: Union[SymbolPartition, SymbolTimeRangePartition]
-    ) -> Dict[str, Any]:
+    def api_params(self, partition: Union[SymbolPartition, SymbolTimeRangePartition]) -> Dict[str, Any]:
         """Get API parameters for requests."""
         params: Dict[str, Any] = {
             "symbols": partition.symbol,

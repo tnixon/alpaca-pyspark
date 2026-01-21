@@ -41,6 +41,7 @@ ContractTuple = Tuple[
 # Filter options that can be passed to the API
 FILTER_OPTIONS = [
     "type",
+    "style",
     "strike_price_gte",
     "strike_price_lte",
     "expiration_date",
@@ -48,6 +49,8 @@ FILTER_OPTIONS = [
     "expiration_date_lte",
     "root_symbol",
     "status",
+    "show_deliverables",
+    "ppind",
 ]
 
 
@@ -67,13 +70,16 @@ class OptionsContractsDataSource(DataSource):
         - endpoint: API endpoint URL (defaults to Alpaca's data endpoint)
         - limit: Maximum number of contracts per API call (default: 10000)
         - type: Filter by contract type ("call" or "put")
+        - style: Filter by contract style ("american" or "european")
         - strike_price_gte: Minimum strike price
         - strike_price_lte: Maximum strike price
         - expiration_date: Exact expiration date (YYYY-MM-DD)
         - expiration_date_gte: Minimum expiration date
         - expiration_date_lte: Maximum expiration date
         - root_symbol: Filter by root symbol
-        - status: Contract status filter
+        - status: Contract status filter ("active" or "inactive")
+        - show_deliverables: Include deliverables array in response (boolean)
+        - ppind: Filter by penny price increment eligibility (boolean)
     """
 
     def __init__(self, options: Dict[str, str]) -> None:
@@ -167,6 +173,22 @@ class OptionsContractsDataSource(DataSource):
         if type_opt is not None and type_opt not in ("call", "put"):
             raise ValueError(f"type must be 'call' or 'put', got '{type_opt}'")
 
+        # Validate style option if provided
+        style_opt = self.options.get("style")
+        if style_opt is not None and style_opt not in ("american", "european"):
+            raise ValueError(f"style must be 'american' or 'european', got '{style_opt}'")
+
+        # Define all known options
+        internal_options = ["endpoint", "rate_limit_delay"]
+        required_options = ["underlying_symbols", "APCA-API-KEY-ID", "APCA-API-SECRET-KEY"]
+        all_known = set(required_options + FILTER_OPTIONS + internal_options + ["limit"])
+
+        # Warn and remove unknown options
+        unknown_opts = [opt for opt in self.options if opt not in all_known]
+        for opt in unknown_opts:
+            logger.warning(f"Unknown option '{opt}' provided. This will be ignored.")
+            del self.options[opt]
+
 
 class OptionsContractsReader(DataSourceReader):
     """Reader implementation for options contracts listing data source."""
@@ -228,10 +250,18 @@ class OptionsContractsReader(DataSourceReader):
             "underlying_symbols": partition.symbol,
             "limit": self.limit,
         }
-        # Add optional filter parameters if provided
-        for opt in FILTER_OPTIONS:
-            if opt in self.options:
-                params[opt] = self.options[opt]
+        # Options not passed to API or already explicitly added above
+        excluded = {
+            "endpoint",
+            "rate_limit_delay",  # internal
+            "APCA-API-KEY-ID",
+            "APCA-API-SECRET-KEY",  # credentials
+            "underlying_symbols",
+            "limit",
+        }  # explicitly added above
+        for opt, val in self.options.items():
+            if opt not in excluded:
+                params[opt] = val
         return params
 
     def read(self, partition: InputPartition) -> Iterator[pa.RecordBatch]:

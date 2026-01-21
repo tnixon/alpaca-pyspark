@@ -142,3 +142,226 @@ class TestRetriableSession:
 
         session = retriable_session()
         assert isinstance(session, Session)
+
+
+@pytest.mark.unit
+class TestOptionalApiParameters:
+    """Tests for optional API parameter functionality."""
+
+    def test_unknown_options_produce_warning(self, caplog):
+        """Test that unknown options produce a warning message."""
+        from alpaca_pyspark.stocks.bars import HistoricalStockBarsDataSource
+        import logging
+
+        options = {
+            "symbols": "['AAPL']",
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+            "start": "2021-01-01",
+            "end": "2021-01-02",
+            "timeframe": "1Day",
+            "unknown_option": "some_value",
+        }
+
+        with caplog.at_level(logging.WARNING):
+            HistoricalStockBarsDataSource(options)
+
+        assert "Unknown option 'unknown_option' provided" in caplog.text
+
+    def test_multiple_unknown_options_produce_warnings(self, caplog):
+        """Test that multiple unknown options each produce a warning."""
+        from alpaca_pyspark.stocks.bars import HistoricalStockBarsDataSource
+        import logging
+
+        options = {
+            "symbols": "['AAPL']",
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+            "start": "2021-01-01",
+            "end": "2021-01-02",
+            "timeframe": "1Day",
+            "foo": "bar",
+            "baz": "qux",
+        }
+
+        with caplog.at_level(logging.WARNING):
+            HistoricalStockBarsDataSource(options)
+
+        assert "Unknown option 'foo' provided" in caplog.text
+        assert "Unknown option 'baz' provided" in caplog.text
+
+    def test_known_options_no_warning(self, caplog):
+        """Test that known options do not produce warnings."""
+        from alpaca_pyspark.stocks.bars import HistoricalStockBarsDataSource
+        import logging
+
+        options = {
+            "symbols": "['AAPL']",
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+            "start": "2021-01-01",
+            "end": "2021-01-02",
+            "timeframe": "1Day",
+            "adjustment": "raw",
+            "feed": "sip",
+        }
+
+        with caplog.at_level(logging.WARNING):
+            HistoricalStockBarsDataSource(options)
+
+        assert "Unknown option" not in caplog.text
+
+    def test_optional_params_included_in_api_params(self):
+        """Test that optional params are included in api_params when present."""
+        from alpaca_pyspark.stocks.bars import HistoricalStockBarsReader
+        import pyarrow as pa
+
+        # Minimal schema for testing
+        schema = pa.schema(
+            [
+                ("symbol", pa.string()),
+                ("time", pa.timestamp("us", tz="UTC")),
+                ("open", pa.float32()),
+                ("high", pa.float32()),
+                ("low", pa.float32()),
+                ("close", pa.float32()),
+                ("volume", pa.int32()),
+                ("trade_count", pa.int32()),
+                ("vwap", pa.float32()),
+            ]
+        )
+
+        options = {
+            "symbols": "['AAPL']",
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+            "start": "2021-01-01",
+            "end": "2021-01-02",
+            "timeframe": "1Day",
+            "adjustment": "split",
+            "feed": "iex",
+        }
+
+        reader = HistoricalStockBarsReader(schema, options)
+        partition = SymbolTimeRangePartition("AAPL", dt(2021, 1, 1), dt(2021, 1, 2))
+
+        params = reader.api_params(partition)
+
+        assert params["adjustment"] == "split"
+        assert params["feed"] == "iex"
+
+    def test_optional_params_not_included_when_absent(self):
+        """Test that optional params are NOT included in api_params when not provided."""
+        from alpaca_pyspark.stocks.bars import HistoricalStockBarsReader
+        import pyarrow as pa
+
+        schema = pa.schema(
+            [
+                ("symbol", pa.string()),
+                ("time", pa.timestamp("us", tz="UTC")),
+                ("open", pa.float32()),
+                ("high", pa.float32()),
+                ("low", pa.float32()),
+                ("close", pa.float32()),
+                ("volume", pa.int32()),
+                ("trade_count", pa.int32()),
+                ("vwap", pa.float32()),
+            ]
+        )
+
+        options = {
+            "symbols": "['AAPL']",
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+            "start": "2021-01-01",
+            "end": "2021-01-02",
+            "timeframe": "1Day",
+        }
+
+        reader = HistoricalStockBarsReader(schema, options)
+        partition = SymbolTimeRangePartition("AAPL", dt(2021, 1, 1), dt(2021, 1, 2))
+
+        params = reader.api_params(partition)
+
+        assert "adjustment" not in params
+        assert "feed" not in params
+        assert "currency" not in params
+
+    def test_bars_optional_params_list(self):
+        """Test that AbstractBarsDataSource has the expected optional params."""
+        from alpaca_pyspark.stocks.bars import HistoricalStockBarsDataSource
+
+        options = {
+            "symbols": "['AAPL']",
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+            "start": "2021-01-01",
+            "end": "2021-01-02",
+            "timeframe": "1Day",
+        }
+
+        datasource = HistoricalStockBarsDataSource(options)
+        optional_params = datasource._optional_api_parameters()
+
+        assert "adjustment" in optional_params
+        assert "feed" in optional_params
+        assert "currency" in optional_params
+        assert "asof" in optional_params
+        assert "sort" in optional_params
+
+    def test_trades_optional_params_list(self):
+        """Test that StockTradesDataSource has the expected optional params."""
+        from alpaca_pyspark.stocks.trades import StockTradesDataSource
+
+        options = {
+            "symbols": "['AAPL']",
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+            "start": "2021-01-01",
+            "end": "2021-01-02",
+        }
+
+        datasource = StockTradesDataSource(options)
+        optional_params = datasource._optional_api_parameters()
+
+        assert "feed" in optional_params
+        assert "currency" in optional_params
+        assert "sort" in optional_params
+        # Trades should NOT have bars-specific params
+        assert "adjustment" not in optional_params
+        assert "asof" not in optional_params
+
+    def test_internal_options_not_in_api_params(self):
+        """Test that internal options are recognized but not passed to API."""
+        from alpaca_pyspark.stocks.bars import HistoricalStockBarsDataSource
+
+        options = {
+            "symbols": "['AAPL']",
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+            "start": "2021-01-01",
+            "end": "2021-01-02",
+            "timeframe": "1Day",
+            "endpoint": "https://custom.endpoint.com",
+            "limit": "5000",
+            "rate_limit_delay": "0.5",
+        }
+
+        # Should not produce any unknown option warnings
+        import logging as log_module
+
+        with pytest.MonkeyPatch().context() as mp:
+            warnings = []
+            original_warning = log_module.Logger.warning
+
+            def capture_warning(self, msg, *args, **kwargs):
+                warnings.append(msg)
+                return original_warning(self, msg, *args, **kwargs)
+
+            mp.setattr(log_module.Logger, "warning", capture_warning)
+
+            HistoricalStockBarsDataSource(options)
+
+            # Filter for unknown option warnings
+            unknown_warnings = [w for w in warnings if "Unknown option" in str(w)]
+            assert len(unknown_warnings) == 0

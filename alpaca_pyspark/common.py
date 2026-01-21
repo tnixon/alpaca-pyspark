@@ -260,6 +260,18 @@ class BaseAlpacaDataSource(DataSource, ABC):
         # Allow subclasses to perform additional validation
         self._validate_additional_options()
 
+        # Warn about and remove unknown options
+        all_known = set(
+            self._common_required_options()
+            + self._additional_required_options()
+            + self._optional_api_parameters()
+            + self._internal_options()
+        )
+        unknown_opts = [opt for opt in self.options if opt not in all_known]
+        for opt in unknown_opts:
+            logger.warning(f"Unknown option '{opt}' provided. This will be ignored.")
+            del self.options[opt]
+
     def _common_required_options(self) -> List[str]:
         """Return list of common required options.
 
@@ -281,6 +293,20 @@ class BaseAlpacaDataSource(DataSource, ABC):
         Subclasses can override this to add custom validation logic.
         """
         pass
+
+    def _optional_api_parameters(self) -> List[str]:
+        """Return list of optional API parameters that can be passed through to API requests.
+
+        Subclasses can override this to add data-source-specific optional parameters.
+        """
+        return []
+
+    def _internal_options(self) -> List[str]:
+        """Return list of internal/infrastructure options that are not passed to the API.
+
+        These are options used for configuration but not included in API requests.
+        """
+        return ["endpoint", "rate_limit_delay"]
 
     @property
     @abstractmethod
@@ -345,7 +371,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
     def partition_interval(self) -> td:
         return td(days=1)
 
-    def partitions(self) -> Sequence[SymbolTimeRangePartition]:
+    def partitions(self) -> Sequence[SymbolPartition]:
         """Create partitions for parallel processing, one per symbol per date."""
         symbol_list = self.symbols
         if not symbol_list:
@@ -373,12 +399,27 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
         Returns: API parameters for the current partition
         """
-        return {
+        params = {
             "symbols": partition.symbol,
             "start": partition.start.isoformat(),
             "end": partition.end.isoformat(),
             "limit": self.limit,
         }
+        # Options not passed to API or already explicitly added above
+        excluded = {
+            "endpoint",
+            "rate_limit_delay",  # internal
+            "APCA-API-KEY-ID",
+            "APCA-API-SECRET-KEY",  # credentials
+            "symbols",
+            "start",
+            "end",
+            "limit",
+        }  # explicitly added above
+        for opt, val in self.options.items():
+            if opt not in excluded:
+                params[opt] = val
+        return params
 
     @property
     @abstractmethod

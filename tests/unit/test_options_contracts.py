@@ -5,7 +5,6 @@ from datetime import date
 
 from alpaca_pyspark.options.contracts import (
     OptionsContractsDataSource,
-    OptionsContractsReader,
 )
 from common import SymbolPartition
 

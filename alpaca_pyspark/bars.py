@@ -85,6 +85,16 @@ class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
         """Bars require the 'timeframe' option."""
         return ["timeframe"]
 
+    def _optional_api_parameters(self) -> List[str]:
+        """Return bars-specific optional API parameters."""
+        return super()._optional_api_parameters() + [
+            "adjustment",  # raw, split, dividend, all
+            "feed",  # iex, sip
+            "currency",  # currency for prices
+            "asof",  # point-in-time for corporate actions
+            "sort",  # asc or desc
+        ]
+
     def schema(self) -> Union[StructType, str]:
         """Return the Spark SQL schema for bars data."""
         return """
