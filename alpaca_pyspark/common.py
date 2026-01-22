@@ -77,8 +77,8 @@ def build_url(endpoint: str, path_elements: List[str], params: Dict[str, str]) -
     param_pairs = []
     for k, v in params.items():
         if v is not None:
-            # URL encode the value
-            quoted_v = urlp.quote(v)
+            # Convert to string and URL encode the value
+            quoted_v = urlp.quote(str(v))
             param_pairs.append(f"{k}={quoted_v}")
 
     param_str = "&".join(param_pairs)
