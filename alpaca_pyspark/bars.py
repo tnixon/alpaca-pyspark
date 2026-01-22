@@ -14,6 +14,7 @@ from functools import cached_property
 from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import pyarrow as pa
+from common import ApiParam, DataSourceOption
 from pyspark.sql.types import StructType
 
 from .common import (
@@ -81,9 +82,21 @@ class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
         - _create_reader(): Return an instance of the asset-specific reader
     """
 
-    def _additional_required_options(self) -> List[str]:
-        """Bars require the 'timeframe' option."""
-        return ["timeframe"]
+    @property
+    def api_params(self) -> List[ApiParam]:
+        return super().api_params + [
+            ApiParam("timeframe", True)
+        ]
+
+    def _validate_params(self, options: Dict[str, str]) -> Dict[str, str]:
+        # validate the timeframe format
+        tf = options.get("timeframe", "")
+        match = re.match(r"^(\d+)([A-Za-z]+)(s?)$", tf)
+        if not match:
+            raise ValueError(f"Invalid timeframe format: {tf}")
+
+        # return the validated params
+        return super()._validate_params(options)
 
     def schema(self) -> Union[StructType, str]:
         """Return the Spark SQL schema for bars data."""
@@ -126,12 +139,6 @@ class AbstractBarsReader(BaseAlpacaReader, ABC):
         - path_elements: Return the API endpoint path (e.g., ["stocks", "bars"])
     """
 
-    def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, Any]:
-        """Get API parameters including timeframe."""
-        params = super().api_params(partition)
-        params["timeframe"] = self.options["timeframe"]
-        return params
-
     @property
     def data_key(self) -> str:
         """Bars data is returned under the 'bars' key."""
@@ -143,7 +150,7 @@ class AbstractBarsReader(BaseAlpacaReader, ABC):
 
         Supports formats like: 1Day, 5Hour, 15Min, 1Week, 1Month
         """
-        tf = self.options.get("timeframe", "")
+        tf = self._params.get("timeframe", "")
         match = re.match(r"^(\d+)([A-Za-z]+)(s?)$", tf)
         if not match:
             raise ValueError(f"Invalid timeframe format: {tf}")

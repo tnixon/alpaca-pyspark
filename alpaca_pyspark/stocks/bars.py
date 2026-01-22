@@ -35,7 +35,7 @@ class StockBarsDataSource(AbstractBarsDataSource):
         return "Alpaca_Stocks_Bars"
 
     def reader(self, schema: StructType) -> "HistoricalStockBarsReader":
-        return HistoricalStockBarsReader(self.pa_schema, self.options)
+        return HistoricalStockBarsReader(self.config, self.pa_schema, self.params)
 
 
 class HistoricalStockBarsReader(AbstractBarsReader):
