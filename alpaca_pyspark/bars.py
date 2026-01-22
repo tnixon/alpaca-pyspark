@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 # Constants
 PAGES_PER_PARTITION = 5
 
+# Valid values for enum-like parameters
+VALID_SORT_VALUES = ("asc", "desc")
+
 # Type alias for bar data tuple: symbol, time, open, high, low, close, volume, trade_count, vwap
 BarTuple = Tuple[str, dt, float, float, float, float, int, int, float]
 
@@ -77,15 +80,22 @@ class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
     Provides common schema and validation for historical bars data (OHLCV candles)
     across different asset types (stocks, options, crypto, etc.).
 
+    Required options (in addition to base class):
+        - timeframe: Time frame for bars (e.g., '1Day', '1Hour', '5Min')
+
+    Optional options (in addition to base class):
+        - sort: Sort order for results ('asc' or 'desc', default: 'asc')
+
     Subclasses must implement:
         - name(): Return the datasource name string
-        - _create_reader(): Return an instance of the asset-specific reader
+        - reader(): Return an instance of the asset-specific reader
     """
 
     @property
     def api_params(self) -> List[ApiParam]:
         return super().api_params + [
-            ApiParam("timeframe", True)
+            ApiParam("timeframe", True),
+            ApiParam("sort", False),
         ]
 
     def _validate_params(self, options: Dict[str, str]) -> Dict[str, str]:
@@ -94,6 +104,13 @@ class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
         match = re.match(r"^(\d+)([A-Za-z]+)(s?)$", tf)
         if not match:
             raise ValueError(f"Invalid timeframe format: {tf}")
+
+        # Validate sort parameter
+        sort = options.get("sort", "").lower()
+        if sort and sort not in VALID_SORT_VALUES:
+            raise ValueError(
+                f"Invalid 'sort' value: '{sort}'. Must be one of: {VALID_SORT_VALUES}"
+            )
 
         # return the validated params
         return super()._validate_params(options)

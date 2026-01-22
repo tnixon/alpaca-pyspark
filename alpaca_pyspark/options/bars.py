@@ -21,13 +21,14 @@ class OptionBarsDataSource(AbstractBarsDataSource):
         - symbols: List of option symbols or string representation of list (OCC format)
         - APCA-API-KEY-ID: Alpaca API key ID
         - APCA-API-SECRET-KEY: Alpaca API secret key
-        - timeframe: Time frame for bars (e.g., '1Day', '1Hour')
+        - timeframe: Time frame for bars (e.g., '1Day', '1Hour', '5Min')
         - start: Start date/time (ISO format)
         - end: End date/time (ISO format)
 
     Optional options:
         - endpoint: API endpoint URL (defaults to Alpaca's data endpoint)
         - limit: Maximum number of bars per API call (default: 10000)
+        - sort: Sort order for results ('asc' or 'desc', default: 'asc')
     """
 
     @classmethod
