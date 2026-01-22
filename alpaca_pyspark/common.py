@@ -44,7 +44,7 @@ class EndpointConfig:
 
 @dataclass
 class ApiParam:
-    """Paramters for the API"""
+    """Parameters for the API"""
 
     name: str
     required: bool
