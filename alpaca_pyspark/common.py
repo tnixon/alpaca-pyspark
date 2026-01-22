@@ -29,7 +29,7 @@ RETRY_DELAY = 1.0
 Symbols_Option_Type = Union[str, List[str], Tuple[str, ...]]
 
 # Type alias for page fetcher function signature
-Page_Fetcher_SigType = Callable[[Session, Dict[str, Any], Optional[str]], Dict[str, Any]]
+Page_Fetcher_SigType = Callable[[Session, Dict[str, str], Optional[str]], Dict[str, Any]]
 
 
 @dataclass
@@ -59,13 +59,13 @@ class SymbolTimeRangePartition(InputPartition):
     end: dt
 
 
-def build_url(endpoint: str, path_elements: List[str], params: Dict[str, Any]) -> str:
+def build_url(endpoint: str, path_elements: List[str], params: Dict[str, str]) -> str:
     """Build a properly encoded URL from components.
 
     Args:
         endpoint: Base API endpoint URL
         path_elements: List of path segments to join
-        params: Query parameters dictionary
+        params: Query parameters dictionary with all values already formatted as strings
 
     Returns:
         Complete URL with properly encoded parameters
@@ -73,17 +73,12 @@ def build_url(endpoint: str, path_elements: List[str], params: Dict[str, Any]) -
     # Build URL path
     path = "/".join(path_elements)
 
-    # Convert all param values to strings and handle None values
+    # Handle None values and URL encode
     param_pairs = []
     for k, v in params.items():
         if v is not None:
-            # Optimize common type conversions
-            if isinstance(v, (int, float, bool)):
-                str_v = str(v)
-            else:
-                str_v = str(v)
-            # URL encode the value
-            quoted_v = urlp.quote(str_v)
+            # Convert to string and URL encode the value
+            quoted_v = urlp.quote(str(v))
             param_pairs.append(f"{k}={quoted_v}")
 
     param_str = "&".join(param_pairs)
@@ -104,7 +99,7 @@ def build_page_fetcher(endpoint: str, headers: Dict[str, str], path_elements: Li
         Function that fetches a single page of data
     """
 
-    def get_page(sess: Session, params: Dict[str, Any], page_token: Optional[str]) -> Dict[str, Any]:
+    def get_page(sess: Session, params: Dict[str, str], page_token: Optional[str]) -> Dict[str, Any]:
         """Fetch a single page of data from the API.
 
         Args:
@@ -170,7 +165,7 @@ def retriable_session(num_retries: int = MAX_RETRIES) -> Session:
 
 def fetch_all_pages(
     page_fetcher_fn: Page_Fetcher_SigType,
-    params: Dict[str, Any],
+    params: Dict[str, str],
     num_retries: int = MAX_RETRIES,
     rate_limit_delay: float = 0.0,
 ) -> Iterator[Dict[str, Any]]:
@@ -386,19 +381,19 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         # partitions for all symbols and intervals
         return [SymbolTimeRangePartition(sym, s, e) for sym in symbol_list for s, e in interval_bounds]
 
-    def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, Any]:
+    def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, str]:
         """Get API parameters for requests.
 
         Args:
             partition: the current partition
 
-        Returns: API parameters for the current partition
+        Returns: API parameters for the current partition, all formatted as strings
         """
-        partition_params: Dict[str, Any] = self._params.copy()
+        partition_params: Dict[str, str] = self._params.copy()
         partition_params["symbols"] = partition.symbol
-        partition_params["start"] = partition.start
-        partition_params["end"] = partition.end
-        partition_params["limit"] = self.limit
+        partition_params["start"] = partition.start.isoformat()
+        partition_params["end"] = partition.end.isoformat()
+        partition_params["limit"] = str(self.limit)
         return partition_params
 
     @property
