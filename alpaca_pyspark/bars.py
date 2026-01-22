@@ -20,7 +20,6 @@ from .common import (
     ApiParam,
     BaseAlpacaDataSource,
     BaseAlpacaReader,
-    SymbolTimeRangePartition,
 )
 
 # Set up logger
@@ -108,9 +107,7 @@ class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
         # Validate sort parameter
         sort = options.get("sort", "").lower()
         if sort and sort not in VALID_SORT_VALUES:
-            raise ValueError(
-                f"Invalid 'sort' value: '{sort}'. Must be one of: {VALID_SORT_VALUES}"
-            )
+            raise ValueError(f"Invalid 'sort' value: '{sort}'. Must be one of: {VALID_SORT_VALUES}")
 
         # return the validated params
         return super()._validate_params(options)

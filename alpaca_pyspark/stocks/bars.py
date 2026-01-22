@@ -57,23 +57,18 @@ class StockBarsDataSource(AbstractBarsDataSource):
         adjustment = options.get("adjustment", "").lower()
         if adjustment and adjustment not in VALID_ADJUSTMENT_VALUES:
             raise ValueError(
-                f"Invalid 'adjustment' value: '{adjustment}'. "
-                f"Must be one of: {VALID_ADJUSTMENT_VALUES}"
+                f"Invalid 'adjustment' value: '{adjustment}'. " f"Must be one of: {VALID_ADJUSTMENT_VALUES}"
             )
 
         # Validate feed parameter
         feed = options.get("feed", "").lower()
         if feed and feed not in VALID_FEED_VALUES:
-            raise ValueError(
-                f"Invalid 'feed' value: '{feed}'. Must be one of: {VALID_FEED_VALUES}"
-            )
+            raise ValueError(f"Invalid 'feed' value: '{feed}'. Must be one of: {VALID_FEED_VALUES}")
 
         # Validate asof date format (YYYY-MM-DD)
         asof = options.get("asof", "")
         if asof and not re.match(r"^\d{4}-\d{2}-\d{2}$", asof):
-            raise ValueError(
-                f"Invalid 'asof' format: '{asof}'. Must be in YYYY-MM-DD format"
-            )
+            raise ValueError(f"Invalid 'asof' format: '{asof}'. Must be in YYYY-MM-DD format")
 
         return super()._validate_params(options)
 

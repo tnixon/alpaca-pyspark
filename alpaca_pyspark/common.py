@@ -41,12 +41,14 @@ class EndpointConfig:
     endpoint: str
     rate_limit_delay: float
 
+
 @dataclass
 class ApiParam:
     """Paramters for the API"""
 
     name: str
     required: bool
+
 
 @dataclass
 class SymbolTimeRangePartition(InputPartition):
@@ -227,10 +229,12 @@ class BaseAlpacaDataSource(DataSource, ABC):
             raise ValueError("APCA-API-SECRET-KEY not provided")
 
         # prepare the config
-        return EndpointConfig( options["APCA-API-KEY-ID"],
-                               options["APCA-API-SECRET-KEY"],
-                               options.get("endpoint", DEFAULT_DATA_ENDPOINT),
-                               float(options.get("rate_limit_delay", 0.0)) )
+        return EndpointConfig(
+            options["APCA-API-KEY-ID"],
+            options["APCA-API-SECRET-KEY"],
+            options.get("endpoint", DEFAULT_DATA_ENDPOINT),
+            float(options.get("rate_limit_delay", 0.0)),
+        )
 
     def _validate_params(self, options: Dict[str, str]) -> Dict[str, str]:
         """Validate that all required options are present and valid."""
@@ -312,10 +316,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
     PyArrow batching support.
     """
 
-    def __init__(self,
-                 config: EndpointConfig,
-                 pa_schema: pa.Schema,
-                 params: Dict[str, str]) -> None:
+    def __init__(self, config: EndpointConfig, pa_schema: pa.Schema, params: Dict[str, str]) -> None:
         super().__init__()
         self._config = config
         self.pa_schema = pa_schema
@@ -327,7 +328,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         return {
             "Content-Type": "application/json",
             "APCA-API-KEY-ID": self._config.api_key_id,
-            "APCA-API-SECRET-KEY": self._config.api_key_secret
+            "APCA-API-SECRET-KEY": self._config.api_key_secret,
         }
 
     @property
@@ -393,7 +394,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
         Returns: API parameters for the current partition
         """
-        partition_params = self._params.copy()
+        partition_params: Dict[str, Any] = self._params.copy()
         partition_params["symbols"] = partition.symbol
         partition_params["start"] = partition.start
         partition_params["end"] = partition.end

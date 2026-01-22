@@ -54,16 +54,12 @@ class StockTradesDataSource(BaseAlpacaDataSource):
         # Validate sort parameter
         sort = options.get("sort", "").lower()
         if sort and sort not in VALID_SORT_VALUES:
-            raise ValueError(
-                f"Invalid 'sort' value: '{sort}'. Must be one of: {VALID_SORT_VALUES}"
-            )
+            raise ValueError(f"Invalid 'sort' value: '{sort}'. Must be one of: {VALID_SORT_VALUES}")
 
         # Validate feed parameter
         feed = options.get("feed", "").lower()
         if feed and feed not in VALID_FEED_VALUES:
-            raise ValueError(
-                f"Invalid 'feed' value: '{feed}'. Must be one of: {VALID_FEED_VALUES}"
-            )
+            raise ValueError(f"Invalid 'feed' value: '{feed}'. Must be one of: {VALID_FEED_VALUES}")
 
         return super()._validate_params(options)
 
