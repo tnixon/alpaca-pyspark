@@ -3,6 +3,7 @@ import logging
 import math
 import time
 import urllib.parse as urlp
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime as dt, timedelta as td
@@ -29,6 +30,24 @@ Symbols_Option_Type = Union[str, List[str], Tuple[str, ...]]
 
 # Type alias for page fetcher function signature
 Page_Fetcher_SigType = Callable[[Session, Dict[str, Any], Optional[str]], Dict[str, Any]]
+
+
+@dataclass
+class EndpointConfig:
+    """Data class for endpoint configuration parameters."""
+
+    api_key_id: str
+    api_key_secret: str
+    endpoint: str
+    rate_limit_delay: float
+
+
+@dataclass
+class ApiParam:
+    """Parameters for the API"""
+
+    name: str
+    required: bool
 
 
 @dataclass
@@ -198,22 +217,45 @@ class BaseAlpacaDataSource(DataSource, ABC):
     """
 
     def __init__(self, options: Dict[str, str]) -> None:
-        super().__init__(options)
-        self._validate_options()
+        self.config = self._endpoint_config(options)
+        self.params = self._validate_params(options)
 
-    def _validate_options(self) -> None:
+    def _endpoint_config(self, options: Dict[str, str]) -> EndpointConfig:
+        """Process options that are used for endpoint configuration"""
+        # check that we have the required API keys
+        if "APCA-API-KEY-ID" not in options:
+            raise ValueError("APCA-API-KEY-ID not provided")
+        if "APCA-API-SECRET-KEY" not in options:
+            raise ValueError("APCA-API-SECRET-KEY not provided")
+
+        # prepare the config
+        return EndpointConfig(
+            options["APCA-API-KEY-ID"],
+            options["APCA-API-SECRET-KEY"],
+            options.get("endpoint", DEFAULT_DATA_ENDPOINT),
+            float(options.get("rate_limit_delay", 0.0)),
+        )
+
+    def _validate_params(self, options: Dict[str, str]) -> Dict[str, str]:
         """Validate that all required options are present and valid."""
-        # Check common required options
-        common_required = ["symbols", "APCA-API-KEY-ID", "APCA-API-SECRET-KEY", "start", "end"]
-        # Allow subclasses to add additional required options
-        required_options = common_required + self._additional_required_options()
+        # options allowed for endpoint config
+        config_options = ["endpoint", "APCA-API-KEY-ID", "APCA-API-SECRET-KEY", "rate_limit_delay"]
 
-        missing = [opt for opt in required_options if opt not in self.options or not self.options[opt]]
+        # make sure that required options are provided
+        required_options = [p.name for p in self.api_params if p.required]
+        missing = [opt for opt in required_options if (opt not in options) or (not options[opt])]
         if missing:
             raise ValueError(f"Missing required options: {missing}")
 
+        # throw warnings about any unrecognized options
+        param_names = [p.name for p in self.api_params]
+        expected_options = param_names + config_options
+        unexpected_options = [opt for opt in options if opt not in expected_options]
+        if unexpected_options:
+            warnings.warn(f"Unexpected options: {unexpected_options}")
+
         # Validate symbols format
-        symbols: Symbols_Option_Type = self.options.get("symbols", [])
+        symbols: Symbols_Option_Type = options.get("symbols", [])
         if isinstance(symbols, str):
             try:
                 parsed_symbols = ast.literal_eval(symbols)
@@ -230,8 +272,8 @@ class BaseAlpacaDataSource(DataSource, ABC):
             raise ValueError(f"Symbols must be a list, tuple, " f"or string representation, got {type(symbols)}")
 
         # Validate start and end datetime formats
-        start_str = self.options.get("start", "")
-        end_str = self.options.get("end", "")
+        start_str = options.get("start", "")
+        end_str = options.get("end", "")
 
         try:
             start_t = dt.fromisoformat(start_str)
@@ -247,22 +289,18 @@ class BaseAlpacaDataSource(DataSource, ABC):
         if start_t > end_t:
             raise ValueError(f"start time is after end time: {start_t} > {end_t}")
 
-        # Allow subclasses to perform additional validation
-        self._validate_additional_options()
+        # return just the parameter-related options
+        return {k: v for k, v in options.items() if k in param_names}
 
-    def _additional_required_options(self) -> List[str]:
-        """Return list of additional required options beyond the common ones.
-
-        Subclasses can override this to add data-source-specific required options.
-        """
-        return []
-
-    def _validate_additional_options(self) -> None:
-        """Perform additional validation specific to the data source.
-
-        Subclasses can override this to add custom validation logic.
-        """
-        pass
+    @property
+    def api_params(self) -> List[ApiParam]:
+        """All of the parameters for this API endpoint."""
+        return [
+            ApiParam("symbols", True),
+            ApiParam("start", False),
+            ApiParam("end", False),
+            ApiParam("limit", False),
+        ]
 
     @property
     @abstractmethod
@@ -278,24 +316,25 @@ class BaseAlpacaReader(DataSourceReader, ABC):
     PyArrow batching support.
     """
 
-    def __init__(self, pa_schema: pa.Schema, options: Dict[str, str]) -> None:
+    def __init__(self, config: EndpointConfig, pa_schema: pa.Schema, params: Dict[str, str]) -> None:
         super().__init__()
+        self._config = config
         self.pa_schema = pa_schema
-        self.options = options
+        self._params = params
 
     @property
     def headers(self) -> Dict[str, str]:
         """Get HTTP headers for API requests."""
         return {
             "Content-Type": "application/json",
-            "APCA-API-KEY-ID": self.options["APCA-API-KEY-ID"],
-            "APCA-API-SECRET-KEY": self.options["APCA-API-SECRET-KEY"],
+            "APCA-API-KEY-ID": self._config.api_key_id,
+            "APCA-API-SECRET-KEY": self._config.api_key_secret,
         }
 
     @property
     def endpoint(self) -> str:
         """Get API endpoint URL."""
-        return self.options.get("endpoint", DEFAULT_DATA_ENDPOINT)
+        return self._config.endpoint
 
     @cached_property
     def symbols(self) -> List[str]:
@@ -303,7 +342,7 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
         Note: Symbol validation occurs in BaseAlpacaDataSource._validate_options()
         """
-        symbols: Symbols_Option_Type = self.options.get("symbols", [])
+        symbols: Symbols_Option_Type = self._params.get("symbols", [])
         if isinstance(symbols, str):
             # Parse string representation (already validated in DataSource)
             return list(ast.literal_eval(symbols))
@@ -313,15 +352,15 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
     @cached_property
     def start(self) -> dt:
-        return dt.fromisoformat(self.options.get("start", ""))
+        return dt.fromisoformat(self._params.get("start", ""))
 
     @cached_property
     def end(self) -> dt:
-        return dt.fromisoformat(self.options.get("end", ""))
+        return dt.fromisoformat(self._params.get("end", ""))
 
     @cached_property
     def limit(self) -> int:
-        return int(self.options.get("limit", DEFAULT_LIMIT))
+        return int(self._params.get("limit", DEFAULT_LIMIT))
 
     @property
     def partition_interval(self) -> td:
@@ -355,12 +394,12 @@ class BaseAlpacaReader(DataSourceReader, ABC):
 
         Returns: API parameters for the current partition
         """
-        return {
-            "symbols": partition.symbol,
-            "start": partition.start.isoformat(),
-            "end": partition.end.isoformat(),
-            "limit": self.limit,
-        }
+        partition_params: Dict[str, Any] = self._params.copy()
+        partition_params["symbols"] = partition.symbol
+        partition_params["start"] = partition.start
+        partition_params["end"] = partition.end
+        partition_params["limit"] = self.limit
+        return partition_params
 
     @property
     @abstractmethod
@@ -415,11 +454,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         # Get base params and set symbol
         params = self.api_params(partition)
 
-        # Get rate limit delay from options (default: 0.0, disabled)
-        rate_limit_delay = float(self.options.get("rate_limit_delay", 0.0))
-
         # process all pages of results
-        for pg in fetch_all_pages(get_page, params, rate_limit_delay=rate_limit_delay):
+        for pg in fetch_all_pages(get_page, params, rate_limit_delay=self._config.rate_limit_delay):
             # Process page as a single batch
             if self.data_key in pg and pg[self.data_key]:
                 # Let subclass parse the page into a batch

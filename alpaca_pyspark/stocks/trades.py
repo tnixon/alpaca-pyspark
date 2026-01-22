@@ -6,12 +6,17 @@ import pyarrow as pa
 from pyspark.sql.types import StructType
 
 from ..common import (
+    ApiParam,
     BaseAlpacaDataSource,
     BaseAlpacaReader,
 )
 
 # Set up logger
 logger = logging.getLogger(__name__)
+
+# Valid values for enum-like parameters
+VALID_SORT_VALUES = ("asc", "desc")
+VALID_FEED_VALUES = ("iex", "sip", "delayed_sip", "otc")
 
 # Type alias for trade data tuple: symbol, time, exchange, price, size, conditions, id, tape
 TradeTuple = Tuple[str, dt, str, float, int, str, int, str]
@@ -30,7 +35,33 @@ class StockTradesDataSource(BaseAlpacaDataSource):
     Optional options:
         - endpoint: API endpoint URL (defaults to Alpaca's data endpoint)
         - limit: Maximum number of trades per API call (default: 10000)
+        - sort: Sort order for results ('asc' or 'desc', default: 'asc')
+        - feed: Data feed source ('iex', 'sip', 'delayed_sip', 'otc')
+        - currency: Currency for prices in ISO 4217 format (default: 'USD')
     """
+
+    @property
+    def api_params(self) -> List[ApiParam]:
+        """Stock trades API parameters including stock-specific options."""
+        return super().api_params + [
+            ApiParam("sort", False),
+            ApiParam("feed", False),
+            ApiParam("currency", False),
+        ]
+
+    def _validate_params(self, options: Dict[str, str]) -> Dict[str, str]:
+        """Validate stock-specific parameters."""
+        # Validate sort parameter
+        sort = options.get("sort", "").lower()
+        if sort and sort not in VALID_SORT_VALUES:
+            raise ValueError(f"Invalid 'sort' value: '{sort}'. Must be one of: {VALID_SORT_VALUES}")
+
+        # Validate feed parameter
+        feed = options.get("feed", "").lower()
+        if feed and feed not in VALID_FEED_VALUES:
+            raise ValueError(f"Invalid 'feed' value: '{feed}'. Must be one of: {VALID_FEED_VALUES}")
+
+        return super()._validate_params(options)
 
     @classmethod
     def name(cls) -> str:
@@ -63,7 +94,7 @@ class StockTradesDataSource(BaseAlpacaDataSource):
         return pa.schema(fields)
 
     def reader(self, schema: StructType) -> "HistoricalStockTradesReader":
-        return HistoricalStockTradesReader(self.pa_schema, self.options)
+        return HistoricalStockTradesReader(self.config, self.pa_schema, self.params)
 
 
 class HistoricalStockTradesReader(BaseAlpacaReader):

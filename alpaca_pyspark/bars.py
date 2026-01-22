@@ -17,9 +17,9 @@ import pyarrow as pa
 from pyspark.sql.types import StructType
 
 from .common import (
+    ApiParam,
     BaseAlpacaDataSource,
     BaseAlpacaReader,
-    SymbolTimeRangePartition,
 )
 
 # Set up logger
@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 # Constants
 PAGES_PER_PARTITION = 5
+
+# Valid values for enum-like parameters
+VALID_SORT_VALUES = ("asc", "desc")
 
 # Type alias for bar data tuple: symbol, time, open, high, low, close, volume, trade_count, vwap
 BarTuple = Tuple[str, dt, float, float, float, float, int, int, float]
@@ -76,14 +79,38 @@ class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
     Provides common schema and validation for historical bars data (OHLCV candles)
     across different asset types (stocks, options, crypto, etc.).
 
+    Required options (in addition to base class):
+        - timeframe: Time frame for bars (e.g., '1Day', '1Hour', '5Min')
+
+    Optional options (in addition to base class):
+        - sort: Sort order for results ('asc' or 'desc', default: 'asc')
+
     Subclasses must implement:
         - name(): Return the datasource name string
-        - _create_reader(): Return an instance of the asset-specific reader
+        - reader(): Return an instance of the asset-specific reader
     """
 
-    def _additional_required_options(self) -> List[str]:
-        """Bars require the 'timeframe' option."""
-        return ["timeframe"]
+    @property
+    def api_params(self) -> List[ApiParam]:
+        return super().api_params + [
+            ApiParam("timeframe", True),
+            ApiParam("sort", False),
+        ]
+
+    def _validate_params(self, options: Dict[str, str]) -> Dict[str, str]:
+        # validate the timeframe format
+        tf = options.get("timeframe", "")
+        match = re.match(r"^(\d+)([A-Za-z]+)(s?)$", tf)
+        if not match:
+            raise ValueError(f"Invalid timeframe format: {tf}")
+
+        # Validate sort parameter
+        sort = options.get("sort", "").lower()
+        if sort and sort not in VALID_SORT_VALUES:
+            raise ValueError(f"Invalid 'sort' value: '{sort}'. Must be one of: {VALID_SORT_VALUES}")
+
+        # return the validated params
+        return super()._validate_params(options)
 
     def schema(self) -> Union[StructType, str]:
         """Return the Spark SQL schema for bars data."""
@@ -126,12 +153,6 @@ class AbstractBarsReader(BaseAlpacaReader, ABC):
         - path_elements: Return the API endpoint path (e.g., ["stocks", "bars"])
     """
 
-    def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, Any]:
-        """Get API parameters including timeframe."""
-        params = super().api_params(partition)
-        params["timeframe"] = self.options["timeframe"]
-        return params
-
     @property
     def data_key(self) -> str:
         """Bars data is returned under the 'bars' key."""
@@ -143,7 +164,7 @@ class AbstractBarsReader(BaseAlpacaReader, ABC):
 
         Supports formats like: 1Day, 5Hour, 15Min, 1Week, 1Month
         """
-        tf = self.options.get("timeframe", "")
+        tf = self._params.get("timeframe", "")
         match = re.match(r"^(\d+)([A-Za-z]+)(s?)$", tf)
         if not match:
             raise ValueError(f"Invalid timeframe format: {tf}")
