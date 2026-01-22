@@ -14,10 +14,10 @@ from functools import cached_property
 from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import pyarrow as pa
-from common import ApiParam, DataSourceOption
 from pyspark.sql.types import StructType
 
 from .common import (
+    ApiParam,
     BaseAlpacaDataSource,
     BaseAlpacaReader,
     SymbolTimeRangePartition,

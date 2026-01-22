@@ -35,7 +35,7 @@ class OptionBarsDataSource(AbstractBarsDataSource):
         return "Alpaca_Options_Bars"
 
     def reader(self, schema: StructType) -> "HistoricalOptionBarsReader":
-        return HistoricalOptionBarsReader(self.pa_schema, self.options)
+        return HistoricalOptionBarsReader(self.config, self.pa_schema, self.params)
 
 
 class HistoricalOptionBarsReader(AbstractBarsReader):

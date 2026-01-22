@@ -63,7 +63,7 @@ class StockTradesDataSource(BaseAlpacaDataSource):
         return pa.schema(fields)
 
     def reader(self, schema: StructType) -> "HistoricalStockTradesReader":
-        return HistoricalStockTradesReader(self.pa_schema, self.options)
+        return HistoricalStockTradesReader(self.config, self.pa_schema, self.params)
 
 
 class HistoricalStockTradesReader(BaseAlpacaReader):

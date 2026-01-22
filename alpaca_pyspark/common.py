@@ -38,7 +38,8 @@ class EndpointConfig:
 
     api_key_id: str
     api_key_secret: str
-    endpoint: Optional[str] = None
+    endpoint: str
+    rate_limit_delay: float
 
 @dataclass
 class ApiParam:
@@ -228,22 +229,23 @@ class BaseAlpacaDataSource(DataSource, ABC):
         # prepare the config
         return EndpointConfig( options["APCA-API-KEY-ID"],
                                options["APCA-API-SECRET-KEY"],
-                               options.get("endpoint", DEFAULT_DATA_ENDPOINT) )
+                               options.get("endpoint", DEFAULT_DATA_ENDPOINT),
+                               float(options.get("rate_limit_delay", 0.0)) )
 
     def _validate_params(self, options: Dict[str, str]) -> Dict[str, str]:
         """Validate that all required options are present and valid."""
         # options allowed for endpoint config
-        config_options = ["endpoint", "APCA-API-KEY-ID", "APCA-API-SECRET-KEY"]
+        config_options = ["endpoint", "APCA-API-KEY-ID", "APCA-API-SECRET-KEY", "rate_limit_delay"]
 
         # make sure that required options are provided
         required_options = [p.name for p in self.api_params if p.required]
-        missing = [opt for opt in required_options if (opt not in self.options) or (not self.options[opt])]
+        missing = [opt for opt in required_options if (opt not in options) or (not options[opt])]
         if missing:
             raise ValueError(f"Missing required options: {missing}")
 
         # throw warnings about any unrecognized options
         param_names = [p.name for p in self.api_params]
-        expected_options = param_names.extend(config_options)
+        expected_options = param_names + config_options
         unexpected_options = [opt for opt in options if opt not in expected_options]
         if unexpected_options:
             warnings.warn(f"Unexpected options: {unexpected_options}")
@@ -284,7 +286,7 @@ class BaseAlpacaDataSource(DataSource, ABC):
             raise ValueError(f"start time is after end time: {start_t} > {end_t}")
 
         # return just the parameter-related options
-        return {k:v for k, v in options if k in param_names}
+        return {k: v for k, v in options.items() if k in param_names}
 
     @property
     def api_params(self) -> List[ApiParam]:
@@ -392,9 +394,9 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         Returns: API parameters for the current partition
         """
         partition_params = self._params.copy()
-        partition_params["symbols"]: partition.symbol
-        partition_params["start"]: partition.start
-        partition_params["end"]: partition.end
+        partition_params["symbols"] = partition.symbol
+        partition_params["start"] = partition.start
+        partition_params["end"] = partition.end
         partition_params["limit"] = self.limit
         return partition_params
 
@@ -451,11 +453,8 @@ class BaseAlpacaReader(DataSourceReader, ABC):
         # Get base params and set symbol
         params = self.api_params(partition)
 
-        # Get rate limit delay from options (default: 0.0, disabled)
-        rate_limit_delay = float(self.options.get("rate_limit_delay", 0.0))
-
         # process all pages of results
-        for pg in fetch_all_pages(get_page, params, rate_limit_delay=rate_limit_delay):
+        for pg in fetch_all_pages(get_page, params, rate_limit_delay=self._config.rate_limit_delay):
             # Process page as a single batch
             if self.data_key in pg and pg[self.data_key]:
                 # Let subclass parse the page into a batch
