@@ -20,17 +20,18 @@ logger = logging.getLogger(__name__)
 VALID_SORT_VALUES = ("asc", "desc")
 VALID_TYPE_VALUES = ("dividend", "split", "merger", "spinoff", "stock_dividend", "all")
 
-# Type alias for corporate action data tuple: symbol, ex_date, record_date, payable_date, type, amount, ratio, new_symbol, old_symbol
+# Type alias for corporate action data tuple:
+#   symbol, ex_date, record_date, payable_date, type, amount, ratio, new_symbol, old_symbol
 CorporateActionTuple = Tuple[
-    str,                # symbol
-    Optional[dt],       # ex_date (can be None)
-    Optional[dt],       # record_date (can be None)  
-    Optional[dt],       # payable_date (can be None)
-    str,                # type
-    float,              # amount
-    float,              # ratio
-    str,                # new_symbol
-    str,                # old_symbol
+    str,  # symbol
+    Optional[dt],  # ex_date (can be None)
+    Optional[dt],  # record_date (can be None)
+    Optional[dt],  # payable_date (can be None)
+    str,  # type
+    float,  # amount
+    float,  # ratio
+    str,  # new_symbol
+    str,  # old_symbol
 ]
 
 
@@ -93,7 +94,7 @@ class CorporateActionsDataSource(BaseAlpacaDataSource):
         return """
             symbol STRING,             -- Stock symbol
             ex_date TIMESTAMP,         -- Ex-dividend date (when stock trades without dividend)
-            record_date TIMESTAMP,     -- Record date (determines dividend eligibility)  
+            record_date TIMESTAMP,     -- Record date (determines dividend eligibility)
             payable_date TIMESTAMP,    -- Payment date (when dividend is paid)
             type STRING,               -- Corporate action type (dividend, split, etc.)
             amount DOUBLE,             -- Cash amount (for dividends) or 0.0 (for splits)
@@ -169,4 +170,6 @@ class CorporateActionsReader(BaseAlpacaReader):
             record_summary = {k: v for k, v in list(record.items())[:3]}
             if len(record) > 3:
                 record_summary["..."] = f"and {len(record) - 3} more fields"
-            raise ValueError(f"Failed to parse corporate action data for symbol {symbol}: {record_summary}. Error: {e}") from e
+            raise ValueError(
+                f"Failed to parse corporate action data for symbol {symbol}: " f"{record_summary}. Error: {e}"
+            ) from e
