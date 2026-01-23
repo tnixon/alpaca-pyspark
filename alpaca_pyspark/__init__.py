@@ -5,6 +5,7 @@ This package provides high-performance, distributed data fetching for various as
 
 Sub-modules:
     - alpaca_pyspark.stocks: Stock market data sources (bars, trades)
+    - alpaca_pyspark.corp_actions: Corporate actions data sources
     - alpaca_pyspark.options: Options data sources (placeholder)
     - alpaca_pyspark.crypto: Cryptocurrency data sources (placeholder)
     - alpaca_pyspark.common: Shared base classes and utilities
