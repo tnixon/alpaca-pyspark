@@ -117,13 +117,13 @@ class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
         return """
             symbol STRING,
             time TIMESTAMP,
-            open FLOAT,
-            high FLOAT,
-            low FLOAT,
-            close FLOAT,
-            volume INT,
-            trade_count INT,
-            vwap FLOAT
+            open DOUBLE,
+            high DOUBLE,
+            low DOUBLE,
+            close DOUBLE,
+            volume BIGINT,
+            trade_count BIGINT,
+            vwap DOUBLE
         """
 
     @property
@@ -132,13 +132,13 @@ class AbstractBarsDataSource(BaseAlpacaDataSource, ABC):
         fields: Iterable[tuple[str, pa.DataType]] = [
             ("symbol", pa.string()),
             ("time", pa.timestamp("us", tz="UTC")),
-            ("open", pa.float32()),
-            ("high", pa.float32()),
-            ("low", pa.float32()),
-            ("close", pa.float32()),
-            ("volume", pa.int32()),
-            ("trade_count", pa.int32()),
-            ("vwap", pa.float32()),
+            ("open", pa.float64()),
+            ("high", pa.float64()),
+            ("low", pa.float64()),
+            ("close", pa.float64()),
+            ("volume", pa.int64()),
+            ("trade_count", pa.int64()),
+            ("vwap", pa.float64()),
         ]
         return pa.schema(fields)
 
