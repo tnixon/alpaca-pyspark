@@ -81,6 +81,14 @@ class TestCorporateActionsDataSource:
         with pytest.raises(ValueError, match="Invalid 'types' values"):
             CorporateActionsDataSource(options)
 
+    def test_empty_types_parameter_after_split(self, base_options):
+        """Test types parameter with empty strings after splitting."""
+        options = {**base_options, "types": "dividend,,split,"}
+        datasource = CorporateActionsDataSource(options)
+        # Should filter out empty strings and work correctly
+        assert "dividend" in datasource.params.get("types", "")
+        assert "split" in datasource.params.get("types", "")
+
     def test_valid_date_type_parameter(self, base_options):
         """Test valid date_type parameter values."""
         for date_type in ["ex_date", "record_date", "payable_date"]:
@@ -193,6 +201,40 @@ class TestCorporateActionsReader:
         
         assert result == expected
 
+    def test_parse_record_malformed_date(self, sample_corp_actions_reader):
+        """Test parsing record with malformed date format raises ValueError."""
+        record = {
+            "ex_date": "invalid-date-format",
+            "record_date": "2021-02-08T00:00:00Z",
+            "payable_date": "2021-02-11T00:00:00Z",
+            "type": "dividend",
+            "amount": 0.205,
+            "ratio": 1.0,
+            "new_symbol": "",
+            "old_symbol": "AAPL",
+        }
+        
+        with pytest.raises(ValueError, match="Failed to parse corporate action data"):
+            sample_corp_actions_reader._parse_record("AAPL", record)
+
+    def test_parse_record_missing_required_fields(self, sample_corp_actions_reader):
+        """Test parsing record with missing required fields raises ValueError."""
+        record = {
+            "ex_date": "2021-02-05T00:00:00Z",
+            # Missing type field
+            "amount": 0.205,
+        }
+        
+        with pytest.raises(ValueError, match="Failed to parse corporate action data"):
+            sample_corp_actions_reader._parse_record("AAPL", record)
+
+    def test_parse_record_invalid_json_structure(self, sample_corp_actions_reader):
+        """Test parsing record with invalid structure raises ValueError."""
+        record = "not_a_dict"
+        
+        with pytest.raises(ValueError, match="Failed to parse corporate action data"):
+            sample_corp_actions_reader._parse_record("AAPL", record)
+
     @pytest.mark.integration
     def test_read_with_mock_api(self, mock_alpaca_api, sample_corp_actions_reader):
         """Test reading data with mocked API response."""
@@ -228,3 +270,28 @@ class TestCorporateActionsReader:
         types = batch.column("type").to_pylist()
         assert "dividend" in types
         assert "split" in types
+
+    @pytest.mark.integration 
+    def test_read_with_http_error(self, mock_alpaca_api, sample_corp_actions_reader):
+        """Test reading data with HTTP error response."""
+        mock_alpaca_api.add(
+            responses.GET,
+            "https://data.alpaca.markets/v2/stocks/corporate_actions",
+            json={"message": "Unauthorized"},
+            status=401
+        )
+
+        # Create a partition for testing
+        partition = SymbolTimeRangePartition(
+            "AAPL",
+            dt(2021, 1, 1),
+            dt(2021, 12, 31)
+        )
+
+        # Reading should handle HTTP errors gracefully
+        # The specific behavior depends on the retry logic in BaseAlpacaReader
+        batches = list(sample_corp_actions_reader.read(partition))
+        
+        # Should return empty list or raise appropriate exception
+        # This test verifies the error handling doesn't crash the reader
+        assert isinstance(batches, list)

@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime as dt
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pyarrow as pa
 from pyspark.sql.types import StructType
@@ -21,7 +21,17 @@ VALID_SORT_VALUES = ("asc", "desc")
 VALID_TYPE_VALUES = ("dividend", "split", "merger", "spinoff", "stock_dividend", "all")
 
 # Type alias for corporate action data tuple: symbol, ex_date, record_date, payable_date, type, amount, ratio, new_symbol, old_symbol
-CorporateActionTuple = Tuple[str, dt, dt, dt, str, float, float, str, str]
+CorporateActionTuple = Tuple[
+    str,                # symbol
+    Optional[dt],       # ex_date (can be None)
+    Optional[dt],       # record_date (can be None)  
+    Optional[dt],       # payable_date (can be None)
+    str,                # type
+    float,              # amount
+    float,              # ratio
+    str,                # new_symbol
+    str,                # old_symbol
+]
 
 
 class CorporateActionsDataSource(BaseAlpacaDataSource):
@@ -62,7 +72,7 @@ class CorporateActionsDataSource(BaseAlpacaDataSource):
         types = options.get("types", "")
         if types:
             # Types can be a comma-separated list or single value
-            type_list = [t.strip().lower() for t in types.split(",")]
+            type_list = [t.strip().lower() for t in types.split(",") if t.strip()]
             invalid_types = [t for t in type_list if t not in VALID_TYPE_VALUES]
             if invalid_types:
                 raise ValueError(f"Invalid 'types' values: {invalid_types}. Must be one of: {VALID_TYPE_VALUES}")
@@ -81,20 +91,20 @@ class CorporateActionsDataSource(BaseAlpacaDataSource):
 
     def schema(self) -> Union[StructType, str]:
         return """
-            symbol STRING,
-            ex_date TIMESTAMP,
-            record_date TIMESTAMP,
-            payable_date TIMESTAMP,
-            type STRING,
-            amount DOUBLE,
-            ratio DOUBLE,
-            new_symbol STRING,
-            old_symbol STRING
+            symbol STRING,             -- Stock symbol
+            ex_date TIMESTAMP,         -- Ex-dividend date (when stock trades without dividend)
+            record_date TIMESTAMP,     -- Record date (determines dividend eligibility)  
+            payable_date TIMESTAMP,    -- Payment date (when dividend is paid)
+            type STRING,               -- Corporate action type (dividend, split, etc.)
+            amount DOUBLE,             -- Cash amount (for dividends) or 0.0 (for splits)
+            ratio DOUBLE,              -- Split ratio (for splits) or 1.0 (for dividends)
+            new_symbol STRING,         -- New symbol after action (for mergers/spinoffs)
+            old_symbol STRING          -- Original symbol before action
         """
 
     @property
     def pa_schema(self) -> pa.Schema:
-        fields: Iterable[tuple[str, pa.DataType]] = [
+        fields: List[Tuple[str, pa.DataType]] = [
             ("symbol", pa.string()),
             ("ex_date", pa.timestamp("us", tz="UTC")),
             ("record_date", pa.timestamp("us", tz="UTC")),
@@ -155,4 +165,8 @@ class CorporateActionsReader(BaseAlpacaReader):
                 record.get("old_symbol", ""),
             )
         except (KeyError, ValueError, TypeError) as e:
-            raise ValueError(f"Failed to parse corporate action data for symbol {symbol}: {record}. Error: {e}") from e
+            # Truncate record data for readability in error messages
+            record_summary = {k: v for k, v in list(record.items())[:3]}
+            if len(record) > 3:
+                record_summary["..."] = f"and {len(record) - 3} more fields"
+            raise ValueError(f"Failed to parse corporate action data for symbol {symbol}: {record_summary}. Error: {e}") from e
