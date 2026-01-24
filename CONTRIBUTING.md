@@ -57,7 +57,7 @@ alpaca-pyspark/
 │   ├── corp_actions/        # Corporate actions data sources
 │   │   ├── corporate_actions.py  # Corporate actions implementation
 │   │   └── __init__.py      # Corporate actions sub-module exports
-│   ├── crypto/              # Crypto data sources (placeholder)
+│   ├── crypto/              # Crypto data sources (placeholder for future implementation)
 │   │   └── __init__.py
 │   └── __init__.py          # Package root
 ├── tests/                   # Test suite

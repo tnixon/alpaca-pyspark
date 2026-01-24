@@ -99,7 +99,7 @@ from alpaca_pyspark.options import HistoricalOptionBarsDataSource
 spark.dataSource.register(HistoricalOptionBarsDataSource)
 
 options = {
-    "symbols": ["AAPL241220C00150000"],  # Options use specific format
+    "symbols": ["AAPL241220C00150000"],  # Options use specific format: SYMBOL[YY]MMDD[C/P]XXXXXXXX
     "APCA-API-KEY-ID": "your-api-key-id",
     "APCA-API-SECRET-KEY": "your-api-secret-key",
     "timeframe": "1Hour",

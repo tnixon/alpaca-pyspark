@@ -426,7 +426,7 @@ options = {
 
 ## API Reference Links
 
-- [Alpaca Market Data API Documentation](https://docs.alpaca.markets/docs/about-market-data-api)
-- [PySpark DataSource API](https://spark.apache.org/docs/latest/api/python/tutorial/sql/python_data_source.html)
-- [PyArrow Documentation](https://arrow.apache.org/docs/python/)
-- [Apache Spark SQL Guide](https://spark.apache.org/docs/latest/sql-programming-guide.html)
+- [Alpaca Market Data API Documentation](https://docs.alpaca.markets/docs/about-market-data-api) - Complete API specification, endpoints, and data formats
+- [PySpark DataSource API](https://spark.apache.org/docs/latest/api/python/tutorial/sql/python_data_source.html) - Tutorial and reference for implementing custom DataSources
+- [PyArrow Documentation](https://arrow.apache.org/docs/python/) - High-performance columnar data processing library used for batching
+- [Apache Spark SQL Guide](https://spark.apache.org/docs/latest/sql-programming-guide.html) - Comprehensive guide to Spark SQL features and syntax
