@@ -3,19 +3,9 @@ name: Tests
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:
-      - 'alpaca_pyspark/**/*.py'
-      - 'tests/**/*.py'
-      - 'pyproject.toml'
-      - 'poetry.lock'
   push:
     branches:
       - main
-    paths:
-      - 'alpaca_pyspark/**/*.py'
-      - 'tests/**/*.py'
-      - 'pyproject.toml'
-      - 'poetry.lock'
 
 jobs:
   pytest:
