@@ -3,19 +3,9 @@ name: Code Quality Checks
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:
-      - 'alpaca_pyspark/**/*.py'
-      - 'pyproject.toml'
-      - 'poetry.lock'
-      - '.flake8'
   push:
     branches:
       - main
-    paths:
-      - 'alpaca_pyspark/**/*.py'
-      - 'pyproject.toml'
-      - 'poetry.lock'
-      - '.flake8'
 
 jobs:
   ruff-format:
