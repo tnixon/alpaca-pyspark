@@ -95,35 +95,19 @@ jobs:
       - name: Run Unit Tests
         run: poetry run pytest -m unit
 
+      - name: Run Unit Tests with Coverage
+        run: poetry run pytest -m unit --cov=alpaca_pyspark --cov-report=xml
+
+      - name: Upload Coverage Reports
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
   build:
     name: Build Package
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/build.yml
     needs: quality-checks
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-
-      - name: Build package
-        run: poetry build
-
-      - name: Upload distribution artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
 
   publish:
     name: Publish to PyPI
@@ -143,45 +127,31 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
-  bump-version:
-    name: Bump to Dev Version
+  release-notes:
+    name: Generate Release Notes
     runs-on: ubuntu-latest
     needs: publish
     permissions:
       contents: write
 
     steps:
-      - name: Checkout main
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Generate Release Notes
+        uses: actions/github-script@v7
         with:
-          python-version: '3.11'
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-
-      - name: Bump to next dev version
-        run: |
-          # Get current version (e.g., 0.1.0)
-          CURRENT=$(poetry version -s)
-          # Parse major.minor.patch
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          # Bump minor, reset patch, add .dev0
-          NEXT_VERSION="$MAJOR.$((MINOR + 1)).0.dev0"
-          poetry version $NEXT_VERSION
-          echo "Bumped version: $CURRENT -> $NEXT_VERSION"
-
-      - name: Commit and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml
-          git commit -m "chore: bump version to $(poetry version -s) [skip ci]"
-          git push
+          script: |
+            const tag = '${{ inputs.tag }}';
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `Release ${tag}`,
+              generate_release_notes: true,
+              prerelease: tag.includes('alpha') || tag.includes('beta') || tag.includes('rc')
+            });
+            console.log(`Created release: ${release.html_url}`);
