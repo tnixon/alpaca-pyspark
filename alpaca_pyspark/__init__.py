@@ -15,4 +15,4 @@ Example usage:
     from alpaca_pyspark.common import BaseAlpacaDataSource
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
