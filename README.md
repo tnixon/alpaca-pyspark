@@ -21,20 +21,30 @@ A high-performance PySpark connector for importing market data from the Alpaca M
 
 ### Installation
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management.
+**For Users:**
+
+Install directly from PyPI using pip:
+
+```bash
+pip install alpaca-pyspark
+```
 
 **Prerequisites:**
 - Python 3.11 or higher
 - Apache Spark 4.0+ / PySpark 4.0+
-- Poetry installed ([installation guide](https://python-poetry.org/docs/#installation))
 
-**Setup:**
+**For Development:**
+
+If you want to contribute or modify the library, use Poetry:
+
 ```bash
 git clone https://github.com/tnixon/alpaca-pyspark.git
 cd alpaca-pyspark
 poetry install
 poetry shell
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup.
 
 ### Basic Example
 

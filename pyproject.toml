@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "alpaca-pyspark"
-version = "0.1.0"
+version = "0.1.1"
 description = "Import market data from Alpaca-API with PySpark"
 authors = ["Tristan Nixon <tristan.nixon@example.com>"]
 readme = "README.md"
