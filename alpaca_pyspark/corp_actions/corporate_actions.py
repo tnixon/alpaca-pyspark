@@ -5,12 +5,13 @@ from datetime import datetime as dt
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pyarrow as pa
-from pyspark.sql.types import StructType
+from pyspark.sql.types import MapType, StringType, StructType
 
 from ..common import (
     ApiParam,
     BaseAlpacaDataSource,
     BaseAlpacaReader,
+    SymbolTimeRangePartition,
 )
 
 # Set up logger
@@ -21,17 +22,14 @@ VALID_SORT_VALUES = ("asc", "desc")
 VALID_TYPE_VALUES = ("dividend", "split", "merger", "spinoff", "stock_dividend", "all")
 
 # Type alias for corporate action data tuple:
-#   symbol, ex_date, record_date, payable_date, type, amount, ratio, new_symbol, old_symbol
+#   symbol, ex_date, record_date, payable_date, type, details
 CorporateActionTuple = Tuple[
     str,  # symbol
     Optional[dt],  # ex_date (can be None)
     Optional[dt],  # record_date (can be None)
     Optional[dt],  # payable_date (can be None)
     str,  # type
-    float,  # amount
-    float,  # ratio
-    str,  # new_symbol
-    str,  # old_symbol
+    Dict[str, Any],  # details (action-specific fields)
 ]
 
 
@@ -42,15 +40,14 @@ class CorporateActionsDataSource(BaseAlpacaDataSource):
         - symbols: List of stock symbols or string representation of list
         - APCA-API-KEY-ID: Alpaca API key ID
         - APCA-API-SECRET-KEY: Alpaca API secret key
-        - start: Start date/time (ISO format)
-        - end: End date/time (ISO format)
+        - start: Start date in YYYY-MM-DD format
+        - end: End date in YYYY-MM-DD format
 
     Optional options:
-        - endpoint: API endpoint URL (defaults to Alpaca's data endpoint)
+        - endpoint: API endpoint URL (defaults to Alpaca's data endpoint, but uses v1 for corporate actions)
         - limit: Maximum number of corporate actions per API call (default: 10000)
         - sort: Sort order for results ('asc' or 'desc', default: 'asc')
         - types: Corporate action types filter ('dividend', 'split', 'merger', 'spinoff', 'stock_dividend', 'all')
-        - date_type: Date field to filter on ('ex_date', 'record_date', 'payable_date', default: 'ex_date')
     """
 
     @property
@@ -59,7 +56,6 @@ class CorporateActionsDataSource(BaseAlpacaDataSource):
         return super().api_params + [
             ApiParam("sort", False),
             ApiParam("types", False),
-            ApiParam("date_type", False),
         ]
 
     def _validate_params(self, options: Dict[str, str]) -> Dict[str, str]:
@@ -78,12 +74,6 @@ class CorporateActionsDataSource(BaseAlpacaDataSource):
             if invalid_types:
                 raise ValueError(f"Invalid 'types' values: {invalid_types}. Must be one of: {VALID_TYPE_VALUES}")
 
-        # Validate date_type parameter
-        date_type = options.get("date_type", "ex_date")
-        valid_date_types = ("ex_date", "record_date", "payable_date")
-        if date_type not in valid_date_types:
-            raise ValueError(f"Invalid 'date_type' value: '{date_type}'. Must be one of: {valid_date_types}")
-
         return super()._validate_params(options)
 
     @classmethod
@@ -93,28 +83,22 @@ class CorporateActionsDataSource(BaseAlpacaDataSource):
     def schema(self) -> Union[StructType, str]:
         return """
             symbol STRING,             -- Stock symbol
-            ex_date TIMESTAMP,         -- Ex-dividend date (when stock trades without dividend)
-            record_date TIMESTAMP,     -- Record date (determines dividend eligibility)
-            payable_date TIMESTAMP,    -- Payment date (when dividend is paid)
+            ex_date DATE,              -- Ex-dividend date (when stock trades without dividend)
+            record_date DATE,          -- Record date (determines dividend eligibility)
+            payable_date DATE,         -- Payment date (when dividend is paid)
             type STRING,               -- Corporate action type (dividend, split, etc.)
-            amount DOUBLE,             -- Cash amount (for dividends) or 0.0 (for splits)
-            ratio DOUBLE,              -- Split ratio (for splits) or 1.0 (for dividends)
-            new_symbol STRING,         -- New symbol after action (for mergers/spinoffs)
-            old_symbol STRING          -- Original symbol before action
+            details MAP<STRING, STRING> -- Action-specific fields (amount, ratio, symbols, etc.)
         """
 
     @property
     def pa_schema(self) -> pa.Schema:
         fields: List[Tuple[str, pa.DataType]] = [
             ("symbol", pa.string()),
-            ("ex_date", pa.timestamp("us", tz="UTC")),
-            ("record_date", pa.timestamp("us", tz="UTC")),
-            ("payable_date", pa.timestamp("us", tz="UTC")),
+            ("ex_date", pa.date32()),
+            ("record_date", pa.date32()),
+            ("payable_date", pa.date32()),
             ("type", pa.string()),
-            ("amount", pa.float64()),
-            ("ratio", pa.float64()),
-            ("new_symbol", pa.string()),
-            ("old_symbol", pa.string()),
+            ("details", pa.map_(pa.string(), pa.string())),
         ]
         return pa.schema(fields)
 
@@ -126,6 +110,21 @@ class CorporateActionsReader(BaseAlpacaReader):
     """Reader implementation for corporate actions data source."""
 
     @property
+    def endpoint(self) -> str:
+        """Corporate actions uses v1 API instead of default v2."""
+        return self._config.endpoint.replace("/v2", "/v1")
+
+    def api_params(self, partition: SymbolTimeRangePartition) -> Dict[str, str]:
+        """Get API parameters with YYYY-MM-DD date format for corporate actions."""
+        partition_params: Dict[str, str] = self._params.copy()
+        partition_params["symbols"] = partition.symbol
+        # Corporate actions API requires YYYY-MM-DD format, not ISO timestamps
+        partition_params["start"] = partition.start.strftime("%Y-%m-%d")
+        partition_params["end"] = partition.end.strftime("%Y-%m-%d")
+        partition_params["limit"] = str(self.limit)
+        return partition_params
+
+    @property
     def data_key(self) -> str:
         """Corporate actions data is returned under the 'corporate_actions' key."""
         return "corporate_actions"
@@ -133,7 +132,7 @@ class CorporateActionsReader(BaseAlpacaReader):
     @property
     def path_elements(self) -> List[str]:
         """URL path for corporate actions endpoint."""
-        return ["stocks", "corporate_actions"]
+        return ["corporate-actions"]
 
     def _parse_record(self, symbol: str, record: Dict[str, Any]) -> CorporateActionTuple:
         """Parse a single corporate action from API response into tuple format.
@@ -150,20 +149,34 @@ class CorporateActionsReader(BaseAlpacaReader):
         """
         try:
             # Parse dates, handling potential None values
-            ex_date = dt.fromisoformat(record["ex_date"]) if record.get("ex_date") else None
-            record_date = dt.fromisoformat(record["record_date"]) if record.get("record_date") else None
-            payable_date = dt.fromisoformat(record["payable_date"]) if record.get("payable_date") else None
+            # Corporate actions API returns dates in YYYY-MM-DD format, not timestamps
+            def parse_date(date_str: Optional[str]) -> Optional[dt]:
+                if not date_str:
+                    return None
+                # Handle both YYYY-MM-DD and ISO timestamp formats for flexibility
+                if "T" in date_str:
+                    return dt.fromisoformat(date_str).replace(tzinfo=None)
+                else:
+                    return dt.strptime(date_str, "%Y-%m-%d")
+
+            ex_date = parse_date(record.get("ex_date"))
+            record_date = parse_date(record.get("record_date"))
+            payable_date = parse_date(record.get("payable_date"))
+
+            # Extract common fields
+            action_type = record.get("type", "")
+            
+            # Pack all other fields into details map
+            common_fields = {"ex_date", "record_date", "payable_date", "type"}
+            details = {k: str(v) if v is not None else "" for k, v in record.items() if k not in common_fields}
 
             return (
                 symbol,
                 ex_date,
                 record_date,
                 payable_date,
-                record.get("type", ""),
-                float(record.get("amount", 0.0)),
-                float(record.get("ratio", 0.0)),
-                record.get("new_symbol", ""),
-                record.get("old_symbol", ""),
+                action_type,
+                details,
             )
         except (KeyError, ValueError, TypeError) as e:
             # Truncate record data for readability in error messages

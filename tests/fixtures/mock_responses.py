@@ -102,9 +102,9 @@ MOCK_CORPORATE_ACTIONS_RESPONSE = {
     "corporate_actions": {
         "AAPL": [
             {
-                "ex_date": "2021-02-05T00:00:00Z",
-                "record_date": "2021-02-08T00:00:00Z",
-                "payable_date": "2021-02-11T00:00:00Z",
+                "ex_date": "2021-02-05",
+                "record_date": "2021-02-08",
+                "payable_date": "2021-02-11",
                 "type": "dividend",
                 "amount": 0.205,
                 "ratio": 1.0,
@@ -112,9 +112,9 @@ MOCK_CORPORATE_ACTIONS_RESPONSE = {
                 "old_symbol": "AAPL",
             },
             {
-                "ex_date": "2021-08-30T00:00:00Z",
-                "record_date": "2021-08-30T00:00:00Z",
-                "payable_date": "2021-08-30T00:00:00Z",
+                "ex_date": "2021-08-30",
+                "record_date": "2021-08-30",
+                "payable_date": "2021-08-30",
                 "type": "split",
                 "amount": 0.0,
                 "ratio": 4.0,

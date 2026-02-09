@@ -30,7 +30,7 @@ class TestCorporateActionsDataSource:
         datasource = CorporateActionsDataSource(base_options)
         schema = datasource.pa_schema
         field_names = [field.name for field in schema]
-        expected_fields = ["symbol", "ex_date", "record_date", "payable_date", "type", "amount", "ratio", "new_symbol", "old_symbol"]
+        expected_fields = ["symbol", "ex_date", "record_date", "payable_date", "type", "details"]
         assert field_names == expected_fields
 
     def test_api_params(self, base_options):
@@ -46,7 +46,7 @@ class TestCorporateActionsDataSource:
         # Check corporate action-specific params
         assert "sort" in param_names
         assert "types" in param_names
-        assert "date_type" in param_names
+        # date_type parameter was removed as it doesn't exist in the API
 
     def test_valid_sort_parameter(self, base_options):
         """Test valid sort parameter values."""
@@ -89,18 +89,7 @@ class TestCorporateActionsDataSource:
         assert "dividend" in datasource.params.get("types", "")
         assert "split" in datasource.params.get("types", "")
 
-    def test_valid_date_type_parameter(self, base_options):
-        """Test valid date_type parameter values."""
-        for date_type in ["ex_date", "record_date", "payable_date"]:
-            options = {**base_options, "date_type": date_type}
-            datasource = CorporateActionsDataSource(options)
-            assert date_type in datasource.params.get("date_type", "")
-
-    def test_invalid_date_type_parameter(self, base_options):
-        """Test invalid date_type parameter raises ValueError."""
-        options = {**base_options, "date_type": "invalid"}
-        with pytest.raises(ValueError, match="Invalid 'date_type' value"):
-            CorporateActionsDataSource(options)
+    # date_type parameter tests removed as the parameter no longer exists in the API
 
 
 class TestCorporateActionsReader:
@@ -112,14 +101,14 @@ class TestCorporateActionsReader:
 
     def test_path_elements(self, sample_corp_actions_reader):
         """Test path elements are correct."""
-        assert sample_corp_actions_reader.path_elements == ["stocks", "corporate_actions"]
+        assert sample_corp_actions_reader.path_elements == ["corporate-actions"]
 
     def test_parse_record_dividend(self, sample_corp_actions_reader):
         """Test parsing a dividend corporate action record."""
         record = {
-            "ex_date": "2021-02-05T00:00:00Z",
-            "record_date": "2021-02-08T00:00:00Z",
-            "payable_date": "2021-02-11T00:00:00Z",
+            "ex_date": "2021-02-05",
+            "record_date": "2021-02-08",
+            "payable_date": "2021-02-11",
             "type": "dividend",
             "amount": 0.205,
             "ratio": 1.0,
@@ -131,14 +120,11 @@ class TestCorporateActionsReader:
         
         expected = (
             "AAPL",
-            dt.fromisoformat("2021-02-05T00:00:00+00:00"),
-            dt.fromisoformat("2021-02-08T00:00:00+00:00"),
-            dt.fromisoformat("2021-02-11T00:00:00+00:00"),
+            dt.strptime("2021-02-05", "%Y-%m-%d"),
+            dt.strptime("2021-02-08", "%Y-%m-%d"),
+            dt.strptime("2021-02-11", "%Y-%m-%d"),
             "dividend",
-            0.205,
-            1.0,
-            "",
-            "AAPL",
+            {"amount": "0.205", "ratio": "1.0", "new_symbol": "", "old_symbol": "AAPL"},
         )
         
         assert result == expected
@@ -146,9 +132,9 @@ class TestCorporateActionsReader:
     def test_parse_record_split(self, sample_corp_actions_reader):
         """Test parsing a split corporate action record."""
         record = {
-            "ex_date": "2021-08-30T00:00:00Z",
-            "record_date": "2021-08-30T00:00:00Z",
-            "payable_date": "2021-08-30T00:00:00Z",
+            "ex_date": "2021-08-30",
+            "record_date": "2021-08-30",
+            "payable_date": "2021-08-30",
             "type": "split",
             "amount": 0.0,
             "ratio": 4.0,
@@ -160,14 +146,11 @@ class TestCorporateActionsReader:
         
         expected = (
             "AAPL",
-            dt.fromisoformat("2021-08-30T00:00:00+00:00"),
-            dt.fromisoformat("2021-08-30T00:00:00+00:00"),
-            dt.fromisoformat("2021-08-30T00:00:00+00:00"),
+            dt.strptime("2021-08-30", "%Y-%m-%d"),
+            dt.strptime("2021-08-30", "%Y-%m-%d"),
+            dt.strptime("2021-08-30", "%Y-%m-%d"),
             "split",
-            0.0,
-            4.0,
-            "AAPL",
-            "AAPL",
+            {"amount": "0.0", "ratio": "4.0", "new_symbol": "AAPL", "old_symbol": "AAPL"},
         )
         
         assert result == expected
@@ -175,7 +158,7 @@ class TestCorporateActionsReader:
     def test_parse_record_with_none_dates(self, sample_corp_actions_reader):
         """Test parsing record with None date values."""
         record = {
-            "ex_date": "2021-02-05T00:00:00Z",
+            "ex_date": "2021-02-05",
             "record_date": None,
             "payable_date": None,
             "type": "dividend",
@@ -189,14 +172,11 @@ class TestCorporateActionsReader:
         
         expected = (
             "AAPL",
-            dt.fromisoformat("2021-02-05T00:00:00+00:00"),
+            dt.strptime("2021-02-05", "%Y-%m-%d"),
             None,
             None,
             "dividend",
-            0.205,
-            1.0,
-            "",
-            "AAPL",
+            {"amount": "0.205", "ratio": "1.0", "new_symbol": "", "old_symbol": "AAPL"},
         )
         
         assert result == expected
@@ -240,7 +220,7 @@ class TestCorporateActionsReader:
         """Test reading data with mocked API response."""
         mock_alpaca_api.add(
             responses.GET,
-            "https://data.alpaca.markets/v2/stocks/corporate_actions",
+            "https://data.alpaca.markets/v1/corporate-actions",
             json=MOCK_CORPORATE_ACTIONS_RESPONSE,
             status=200
         )
@@ -261,7 +241,7 @@ class TestCorporateActionsReader:
         
         # Verify batch structure
         assert batch.num_rows == 2  # Two corporate actions in mock data
-        assert batch.num_columns == 9  # All schema fields
+        assert batch.num_columns == 6  # All schema fields
         
         # Verify column data
         symbols = batch.column("symbol").to_pylist()
@@ -276,7 +256,7 @@ class TestCorporateActionsReader:
         """Test reading data with HTTP error response."""
         mock_alpaca_api.add(
             responses.GET,
-            "https://data.alpaca.markets/v2/stocks/corporate_actions",
+            "https://data.alpaca.markets/v1/corporate-actions",
             json={"message": "Unauthorized"},
             status=401
         )
