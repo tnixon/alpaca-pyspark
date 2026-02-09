@@ -46,7 +46,8 @@ class TestCorporateActionsDataSource:
         # Check corporate action-specific params
         assert "sort" in param_names
         assert "types" in param_names
-        assert "date_type" in param_names
+        assert "cuspis" in param_names
+        assert "ids" in param_names
 
     def test_valid_sort_parameter(self, base_options):
         """Test valid sort parameter values."""
@@ -89,18 +90,17 @@ class TestCorporateActionsDataSource:
         assert "dividend" in datasource.params.get("types", "")
         assert "split" in datasource.params.get("types", "")
 
-    def test_valid_date_type_parameter(self, base_options):
-        """Test valid date_type parameter values."""
-        for date_type in ["ex_date", "record_date", "payable_date"]:
-            options = {**base_options, "date_type": date_type}
-            datasource = CorporateActionsDataSource(options)
-            assert date_type in datasource.params.get("date_type", "")
+    def test_cuspis_parameter(self, base_options):
+        """Test cuspis parameter support."""
+        options = {**base_options, "cuspis": "037833100,594918104"}
+        datasource = CorporateActionsDataSource(options)
+        assert "037833100,594918104" in datasource.params.get("cuspis", "")
 
-    def test_invalid_date_type_parameter(self, base_options):
-        """Test invalid date_type parameter raises ValueError."""
-        options = {**base_options, "date_type": "invalid"}
-        with pytest.raises(ValueError, match="Invalid 'date_type' value"):
-            CorporateActionsDataSource(options)
+    def test_ids_parameter(self, base_options):
+        """Test ids parameter support."""
+        options = {**base_options, "ids": "id1,id2,id3"}
+        datasource = CorporateActionsDataSource(options)
+        assert "id1,id2,id3" in datasource.params.get("ids", "")
 
 
 class TestCorporateActionsReader:
@@ -112,33 +112,35 @@ class TestCorporateActionsReader:
 
     def test_path_elements(self, sample_corp_actions_reader):
         """Test path elements are correct."""
-        assert sample_corp_actions_reader.path_elements == ["stocks", "corporate_actions"]
+        assert sample_corp_actions_reader.path_elements == ["corporate-actions"]
 
     def test_parse_record_dividend(self, sample_corp_actions_reader):
         """Test parsing a dividend corporate action record."""
         record = {
-            "ex_date": "2021-02-05T00:00:00Z",
-            "record_date": "2021-02-08T00:00:00Z",
-            "payable_date": "2021-02-11T00:00:00Z",
-            "type": "dividend",
-            "amount": 0.205,
-            "ratio": 1.0,
-            "new_symbol": "",
-            "old_symbol": "AAPL",
+            "cusip": "037833100",
+            "ex_date": "2021-02-05",
+            "record_date": "2021-02-08",
+            "payable_date": "2021-02-11",
+            "rate": 0.205,
+            "foreign": False,
+            "special": False,
+            "symbol": "AAPL",
+            "id": "dividend-1",
+            "process_date": "2021-02-11"
         }
         
         result = sample_corp_actions_reader._parse_record("AAPL", record)
         
         expected = (
             "AAPL",
-            dt.fromisoformat("2021-02-05T00:00:00+00:00"),
-            dt.fromisoformat("2021-02-08T00:00:00+00:00"),
-            dt.fromisoformat("2021-02-11T00:00:00+00:00"),
+            dt.fromisoformat("2021-02-05T00:00:00"),
+            dt.fromisoformat("2021-02-08T00:00:00"),
+            dt.fromisoformat("2021-02-11T00:00:00"),
             "dividend",
             0.205,
             1.0,
             "",
-            "AAPL",
+            "",
         )
         
         assert result == expected
@@ -146,28 +148,30 @@ class TestCorporateActionsReader:
     def test_parse_record_split(self, sample_corp_actions_reader):
         """Test parsing a split corporate action record."""
         record = {
-            "ex_date": "2021-08-30T00:00:00Z",
-            "record_date": "2021-08-30T00:00:00Z",
-            "payable_date": "2021-08-30T00:00:00Z",
-            "type": "split",
-            "amount": 0.0,
-            "ratio": 4.0,
-            "new_symbol": "AAPL",
-            "old_symbol": "AAPL",
+            "cusip": "037833100",
+            "ex_date": "2021-08-30",
+            "record_date": "2021-08-30",
+            "payable_date": "2021-08-30",
+            "due_bill_redemption_date": "2021-09-01",
+            "new_rate": 4,
+            "old_rate": 1,
+            "symbol": "AAPL",
+            "id": "split-1",
+            "process_date": "2021-08-30"
         }
         
         result = sample_corp_actions_reader._parse_record("AAPL", record)
         
         expected = (
             "AAPL",
-            dt.fromisoformat("2021-08-30T00:00:00+00:00"),
-            dt.fromisoformat("2021-08-30T00:00:00+00:00"),
-            dt.fromisoformat("2021-08-30T00:00:00+00:00"),
+            dt.fromisoformat("2021-08-30T00:00:00"),
+            dt.fromisoformat("2021-08-30T00:00:00"),
+            dt.fromisoformat("2021-08-30T00:00:00"),
             "split",
             0.0,
             4.0,
-            "AAPL",
-            "AAPL",
+            "",
+            "",
         )
         
         assert result == expected
@@ -175,28 +179,27 @@ class TestCorporateActionsReader:
     def test_parse_record_with_none_dates(self, sample_corp_actions_reader):
         """Test parsing record with None date values."""
         record = {
-            "ex_date": "2021-02-05T00:00:00Z",
+            "ex_date": "2021-02-05",
             "record_date": None,
             "payable_date": None,
-            "type": "dividend",
-            "amount": 0.205,
-            "ratio": 1.0,
-            "new_symbol": "",
-            "old_symbol": "AAPL",
+            "rate": 0.205,
+            "foreign": False,
+            "symbol": "AAPL",
+            "id": "dividend-2"
         }
         
         result = sample_corp_actions_reader._parse_record("AAPL", record)
         
         expected = (
             "AAPL",
-            dt.fromisoformat("2021-02-05T00:00:00+00:00"),
+            dt.fromisoformat("2021-02-05T00:00:00"),
             None,
             None,
             "dividend",
             0.205,
             1.0,
             "",
-            "AAPL",
+            "",
         )
         
         assert result == expected
@@ -205,13 +208,11 @@ class TestCorporateActionsReader:
         """Test parsing record with malformed date format raises ValueError."""
         record = {
             "ex_date": "invalid-date-format",
-            "record_date": "2021-02-08T00:00:00Z",
-            "payable_date": "2021-02-11T00:00:00Z",
-            "type": "dividend",
-            "amount": 0.205,
-            "ratio": 1.0,
-            "new_symbol": "",
-            "old_symbol": "AAPL",
+            "record_date": "2021-02-08",
+            "payable_date": "2021-02-11",
+            "rate": 0.205,
+            "symbol": "AAPL",
+            "id": "dividend-bad"
         }
         
         with pytest.raises(ValueError, match="Failed to parse corporate action data"):
@@ -220,9 +221,9 @@ class TestCorporateActionsReader:
     def test_parse_record_missing_required_fields(self, sample_corp_actions_reader):
         """Test parsing record with missing required fields raises ValueError."""
         record = {
-            "ex_date": "2021-02-05T00:00:00Z",
-            # Missing type field
-            "amount": 0.205,
+            "ex_date": "2021-02-05",
+            # Missing required fields like symbol
+            "id": "incomplete-record",
         }
         
         with pytest.raises(ValueError, match="Failed to parse corporate action data"):
@@ -240,7 +241,7 @@ class TestCorporateActionsReader:
         """Test reading data with mocked API response."""
         mock_alpaca_api.add(
             responses.GET,
-            "https://data.alpaca.markets/v2/stocks/corporate_actions",
+            "https://data.alpaca.markets/v1/corporate-actions",
             json=MOCK_CORPORATE_ACTIONS_RESPONSE,
             status=200
         )
@@ -276,7 +277,7 @@ class TestCorporateActionsReader:
         """Test reading data with HTTP error response."""
         mock_alpaca_api.add(
             responses.GET,
-            "https://data.alpaca.markets/v2/stocks/corporate_actions",
+            "https://data.alpaca.markets/v1/corporate-actions",
             json={"message": "Unauthorized"},
             status=401
         )
